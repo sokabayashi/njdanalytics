@@ -37,8 +37,8 @@ setup_nhl_db <- function() {
 
   nhl_db <- src_postgres( dbname = "nhl", user = "postgres", password = "postgres" )
 
-  team_tbl  <<- tbl( nhl_db, "team" )
-  assign( "team_tbl", team_tbl, envir = .GlobalEnv )
+  # team_tbl  <<- tbl( nhl_db, "team" )
+  # assign( "team_tbl", team_tbl, envir = .GlobalEnv )
 
   nhl_db
 }
