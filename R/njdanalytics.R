@@ -9,14 +9,14 @@ NULL
 .onAttach <- function( libname, pkgname ) {
   # packageStartupMessage( "" )
   base_dir     <- "/media/driveb/projects/nhl"
-  vault_dir    <- paste0( base_dir,  "/Vault" )
-  r_dir        <- paste0( vault_dir, "/R" )
-  db_dir       <- paste0( r_dir,     "/db" )
-  fa_dir       <- paste0( r_dir,     "/fa" )
-  draft_dir    <- paste0( r_dir,     "/draft" )
-  report_dir   <- paste0( r_dir,     "/report" )
+  vault_dir    <- paste0( base_dir,  "/Vault"    )
+  r_dir        <- paste0( vault_dir, "/R"        )
+  db_dir       <- paste0( r_dir,     "/db"       )
+  fa_dir       <- paste0( r_dir,     "/fa"       )
+  draft_dir    <- paste0( r_dir,     "/draft"    )
+  report_dir   <- paste0( r_dir,     "/report"   )
   analysis_dir <- paste0( r_dir,     "/analysis" )
-  study_dir    <- paste0( r_dir,     "/study" )
+  study_dir    <- paste0( r_dir,     "/study"    )
 
   assign( "base_dir",     base_dir,      envir = .GlobalEnv )
   assign( "vault_dir",    vault_dir,     envir = .GlobalEnv )

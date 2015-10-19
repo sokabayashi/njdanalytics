@@ -5,7 +5,7 @@ Version: 0.1.0
 Authors@R: person( "Sai", "Okabayashi", email = "sokabayashi@newjerseydevils.com",
   role = c( "aut", "cre" ) )
 Description: Commonly used functions for working with NHL data in the NJD environment.
-License: What license is it under?
+License: file LICENSE
 LazyData: TRUE
 Depends:
     nhlutils
