@@ -6,6 +6,9 @@
 \usage{
 setup_nhl_db()
 }
+\value{
+An src for connecting to the 'nhl' PostgreSQL database.
+}
 \description{
 Setup a src to our NHL postgreSQL database
 }
