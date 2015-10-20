@@ -21,7 +21,8 @@ NULL
     draft    = paste0( r_dir,     "/draft"    ),
     report   = paste0( r_dir,     "/report"   ),
     analysis = paste0( r_dir,     "/analysis" ),
-    study    = paste0( r_dir,     "/study"    )
+    study    = paste0( r_dir,     "/study"    ),
+    shotdata = paste0( base_dir, "/data/shot" )
   )
 
   assign( "nhl_dir", nhl_dir, envir = .GlobalEnv )
