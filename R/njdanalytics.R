@@ -19,7 +19,7 @@ NULL
     db       = paste0( r_dir,     "/db"       ),
     fa       = paste0( r_dir,     "/fa"       ),
     draft    = paste0( r_dir,     "/draft"    ),
-    report   = paste0( r_dir,     "/report"   ),
+    reports  = paste0( r_dir,     "/reports"  ),
     analysis = paste0( r_dir,     "/analysis" ),
     study    = paste0( r_dir,     "/study"    ),
     shotdata = paste0( base_dir, "/data/shot" )

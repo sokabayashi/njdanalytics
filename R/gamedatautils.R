@@ -1,9 +1,11 @@
 
 # Game Data functions ----------------------------------------------------------
-
+#
+#'  Get all time intervals from a game with diff number of on ice players
+#'
 #' @param shift_interval_df A data frame of shift intervals, from stage_shift_interval tbl
 #' @param ha A character "H" or "A"
-#' @return Data frame of all time intervals from a game with diff number of on ice players
+#' @return Data frame of time intervals
 #' @export
 get_num_player_intervals_ha <- function( shift_interval_df, ha = "H" ) {
   if( ha == "H" ) {
@@ -40,14 +42,17 @@ get_num_player_intervals_ha <- function( shift_interval_df, ha = "H" ) {
 # Suppose team gets two consecutive penalties, separarated by 30 sec.
 # assume opponent does not score.
 # we will get 3 rows: a 30 sec 5on4, a 1:30 5on3, a 30 sec 5on4.
+
+#' Get intervals for when each team is shorthanded during a game.
+#'
 #' @param shift_interval_df A data frame of shift intervals, from stage_shift_interval tbl
 #' @param game_infoA data frame of game info from stage_game
 #' @return Data frame of all man down time intervals from a game.
 #' @export
 get_mandown_intervals <- function( shift_interval_df, game_info ) {
 
-  mandown_times_h <- get_num_player_runs_ha( shift_interval_df, "H" )
-  mandown_times_a <- get_num_player_runs_ha( shift_interval_df, "A" )
+  mandown_times_h <- get_num_player_intervals_ha( shift_interval_df, "H" )
+  mandown_times_a <- get_num_player_intervals_ha( shift_interval_df, "A" )
 
   # we require a min num of players of 4 bc sometimes it's just bad data (missing goalie)
   mandown_times_h <- mandown_times_h %>% filter( num_players >= 4 )

@@ -211,6 +211,7 @@ this_game_num <- 8
 this_game_id4 <- shots_tbl %>% filter( game_num==this_game_num ) %>% head(1) %>% select( game_id4 ) %>% unlist(use.names = F)
 
 # get the base data for this game
+this_game_score   <- njd_games %>%            filter( game_number==this_game_num )
 shots_df          <- shots_tbl %>%            filter( game_id4==this_game_id4 )
 game_info         <- stage_game %>%           filter( game_id4==this_game_id4 )
 pbp_df            <- stage_playbyplay %>%     filter( game_id4==this_game_id4 )
@@ -239,19 +240,15 @@ if( (game_info$session_id == "1" || game_info$session_id == "2") && max(pbp_df$p
 
 
 
-
-
-
 # NJD perspective
 our_team <- "NJD"
 row_ha   <- "H"; col_ha   <- "A"
 if( our_team %in% c( game_info$home_team_short, game_info$away_team_short ) ) {
+  # an NJD game
   if( our_team == game_info$home_team_short ) {
-    # njd_away_game <- FALSE
     their_team <- game_info$away_team_short
   } else {
     their_team <- game_info$home_team_short
-    # njd_away_game <- TRUE
     row_ha   <- "A"
     col_ha   <- "H"
   }
@@ -260,6 +257,7 @@ if( our_team %in% c( game_info$home_team_short, game_info$away_team_short ) ) {
   our_team   <- game_info$home_team_short
   their_team <- game_info$away_team_short
 }
+
 game_info <- game_info %>% mutate(
   our_team   = our_team,
   their_team = their_team
