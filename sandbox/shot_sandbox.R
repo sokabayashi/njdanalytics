@@ -1,10 +1,12 @@
 
 
-create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=FALSE, this.game.dir=NULL ) {
+create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df,
+  param=list(ev5on5=FALSE, this.game.dir=NULL) ) {
 
   # tedious to type out full var every time
   our_team   <- game_info$our_team
   their_team <- game_info$their_team
+  ev5on5     <- param$ev5on5
 
   gtitle <- sprintf( "%s %s@%s: Unblocked Green Shot Attempts",
     format( as.Date(game_info$game_date), "%a %m.%d.%y"),
@@ -75,26 +77,34 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
   y.axis.min <- min( green_shots_m$count )
   y.axis.max <- max( green_shots_m$count )
 
-  line_colors <- setNames( c( "red", "darkgrey"), c( our_team, their_team ))
+  their_color <- "grey40"
+  line_colors <- setNames( c( "red", their_color ), c( our_team, their_team ))
   rect_colors <- setNames( c( "red", "cornflowerblue"),
     c( our_team, their_team ))
 
 
   p.shots <- ggplot( green_shots_m ) # + geom_hline( aes(yintercept=0) )
 
-  p.shots <- p.shots + geom_step( aes(x=start_cum, y=count, color=event_team),size=1 )
+  p.shots <- p.shots + geom_step( aes(x=start_cum, y=count, color=event_team),size=1.75 )
 
   # Extract y axis max for G labeling
   y.axis.min <- ggplot_build(p.shots)$panel$ranges[[1]]$y.range[1]
   y.axis.max <- ggplot_build(p.shots)$panel$ranges[[1]]$y.range[2]
 
   if( nrow( mandown_intervals_df ) ) {
-    mandown_intervals_df$ymin <- -Inf #  y.axis.min
-    mandown_intervals_df$ymax <-  Inf #  y.axis.max
+    mandown_intervals_df <- mandown_intervals_df %>% mutate(
+      ymin = -Inf, #  y.axis.min
+      ymax =  Inf #  y.axis.max
+    )
+
     p.shots <- p.shots +
       geom_rect( data=mandown_intervals_df, aes( xmin=start_cum, xmax=end_cum,
-                                          ymin=ymin, ymax=ymax, fill=down_team ), color="grey30", size=.1, alpha=0.25 ) +
-      scale_fill_manual( name="Penalty", breaks=c(their_team, our_team), values=rect_colors )
+                                          ymin=ymin, ymax=ymax, fill=down_team ), alpha=0.15, color="grey30", size=.15 )
+    if( nrow( mandown_intervals_df %>% filter( num_players < 5 ) )>1 ) {
+      p.shots <- p.shots + geom_rect( data=mandown_intervals_df %>% filter( num_players < 5 ),
+        aes( xmin=start_cum, xmax=end_cum, ymin=ymin, ymax=ymax, fill=down_team ), alpha=0.25, color="grey30", size=.15 )
+    }
+    p.shots <- p.shots + scale_fill_manual( name="Penalty", breaks=c(their_team, our_team), values=rect_colors )
   }
 
   y_shot_max <- 1.2*y.axis.max
@@ -106,9 +116,9 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     scale_shape_manual( name="", values=c(17,18), labels=c("Non-5on5 shot attempt", "even") )
 
   if( nrow( goals_df) > 0 ) {
-    p.shots <- p.shots + geom_vline( data=goals_df, aes(xintercept=start_cum, color=event_team), size=0.35 )
+    p.shots <- p.shots + geom_vline( data=goals_df, aes(xintercept=start_cum, color=event_team), linetype="solid", size=0.6 )
 
-    goals_df$y.goal_text <- y.axis.max
+    goals_df$y.goal_text <- 1.1*y.axis.max
     p.shots <- p.shots + geom_text( data=goals_df, aes(label=goal_text, x=start_cum, y=y.goal_text, color=event_team),
       angle=90, show_guide=F, hjust= 0.8, size=geom_text.size, vjust=-0.4 )
   }
@@ -119,7 +129,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     scale_x_continuous( breaks = seq( 0, 200, by=5 ), expand=c(0,0) ) +
     scale_y_continuous( breaks = seq( -300, 300, by=2 ), expand=c(0,0),limits=c(0,y_shot_max) ) +
     labs( title=gtitle ) + xlab( "Game Time (Minutes)" ) + ylab( "Shot Attempts") +
-    theme_bw() + theme( text = element_text(size=chart_text.size),
+    theme_few() + theme( text = element_text(size=chart_text.size),
       legend.position="bottom", legend.box = "horizontal" )
 
 
@@ -206,12 +216,12 @@ shots_tbl <- shots_tbl %>% left_join( njd_games, by=c( "game_num"="game_number")
 # aggregate stats ---------------------------------------------------------
 
 # unblocked Green shots
-fenwick_df <- shots_df %>% filter(shot!="BLOCK" )
+fenwick_df <- shots_tbl %>% filter(shot!="BLOCK" )
 fenwick_df %>% group_by( game_num, event_team ) %>% summarize( green=n() )
 
 # single game -------------------------------------------------------------
 
-this_game_num <- 2
+this_game_num <- 6
 this_game_id4 <- shots_tbl %>% filter( game_num==this_game_num ) %>% head(1) %>% select( game_id4 ) %>% unlist(use.names = F)
 
 # get the base data for this game
@@ -223,26 +233,7 @@ shift_interval_df <- stage_shift_interval %>% filter( game_id4==this_game_id4 )
 
 # meta data for chart
 mandown_intervals_df <- get_mandown_intervals( shift_interval_df, game_info )
-goals_df <- pbp_df %>% filter( event_type == "GOAL" )
-winning_team_short <- with( game_info, ifelse( home_score_final > away_score_final, home_team_short, away_team_short ) )
-
-## Shootout: Filter out all SO goals except last one
-if( (game_info$session_id == "1" || game_info$session_id == "2") && max(pbp_df$period) == 5 ) {
-
-  # SO scores keep incrementing and the way the data is written to db, we don't know SO winner (oh no)
-  ot_score  <- pbp_df %>% filter( event_type == "PEND", period == 4 ) # grab pre-SO score
-  so_goals <- goals_df %>% filter( period == 5 )
-  # arbitrarily grab first goal by winning team
-  so_winner <- so_goals %>% filter( event_team == winning_team_short ) %>% head(1)
-
-  so_winner$away_score <- ot_score$away_score
-  so_winner$home_score <- ot_score$home_score
-
-  goals_df <- goals_df %>% filter( period < 5 )
-  goals_df <- bind_rows( goals_df, so_winner )
-}
-
-
+goals_df             <- get_goals_from_pbp( pbp_df, game_info )
 
 # NJD perspective
 our_team <- "NJD"
@@ -267,7 +258,7 @@ game_info <- game_info %>% mutate(
   their_team = their_team
 )
 
-create_shot_quality_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=FALSE, this.game.dir=NULL )
+create_shot_quality_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, param=list(ev5on5=F) )
 
 
 
