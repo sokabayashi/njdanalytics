@@ -2,11 +2,11 @@
 
 create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=FALSE, this.game.dir=NULL ) {
 
-  # used a lot
+  # tedious to type out full var every time
   our_team   <- game_info$our_team
   their_team <- game_info$their_team
 
-  gtitle <- sprintf( "%s %s@%s: Quality Shot Attempts",
+  gtitle <- sprintf( "%s %s@%s: Unblocked Green Shot Attempts",
     format( as.Date(game_info$game_date), "%a %m.%d.%y"),
     game_info$away_team_short, game_info$home_team_short )
   message( gtitle )
@@ -25,7 +25,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
   green_shots <- shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK" ) %>%
                           select( start_cum, event_team, shooter, strength )
   green_shots <- green_shots %>% mutate(
-    ev5on5 = strength=="EV 5on5"
+    ev5on5 = strength=="EV 5v5"
   )
 
   if( ev5on5 ) {
@@ -75,14 +75,14 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
   y.axis.min <- min( green_shots_m$count )
   y.axis.max <- max( green_shots_m$count )
 
-  line_colors <- setNames( c( "red", "black"), c( our_team, their_team ))
+  line_colors <- setNames( c( "red", "darkgrey"), c( our_team, their_team ))
   rect_colors <- setNames( c( "red", "cornflowerblue"),
     c( our_team, their_team ))
 
 
-  p.shots <- ggplot( green_shots_m ) + geom_hline( aes(yintercept=0) )
+  p.shots <- ggplot( green_shots_m ) # + geom_hline( aes(yintercept=0) )
 
-  p.shots <- p.shots + geom_step( aes(x=start_cum, y=count, color=event_team) )
+  p.shots <- p.shots + geom_step( aes(x=start_cum, y=count, color=event_team),size=1 )
 
   # Extract y axis max for G labeling
   y.axis.min <- ggplot_build(p.shots)$panel$ranges[[1]]$y.range[1]
@@ -93,10 +93,11 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     mandown_intervals_df$ymax <-  Inf #  y.axis.max
     p.shots <- p.shots +
       geom_rect( data=mandown_intervals_df, aes( xmin=start_cum, xmax=end_cum,
-                                          ymin=ymin, ymax=ymax, fill=down_team ), color="grey30", size=.1, alpha=0.30 ) +
+                                          ymin=ymin, ymax=ymax, fill=down_team ), color="grey30", size=.1, alpha=0.25 ) +
       scale_fill_manual( name="Penalty", breaks=c(their_team, our_team), values=rect_colors )
   }
 
+  y_shot_max <- 1.2*y.axis.max
   p.shots <- p.shots +
     geom_point( data=green_shots_m %>% filter( !ev5on5 ),
       aes(x=start_cum, y=count,shape=ev5on5), color="darkorange", size=geom_point.size ) +
@@ -113,8 +114,10 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
   }
 
   # cosmetic chart stuff here
-  p.shots <- p.shots + scale_x_continuous( breaks = seq( 0, 200, by=5 ) ) +
-    scale_y_continuous( breaks = seq( -300, 300, by=2 ) ) +
+  p.shots <- p.shots +
+   # expand_limits(x = 0, y = 0) +
+    scale_x_continuous( breaks = seq( 0, 200, by=5 ), expand=c(0,0) ) +
+    scale_y_continuous( breaks = seq( -300, 300, by=2 ), expand=c(0,0),limits=c(0,y_shot_max) ) +
     labs( title=gtitle ) + xlab( "Game Time (Minutes)" ) + ylab( "Shot Attempts") +
     theme_bw() + theme( text = element_text(size=chart_text.size),
       legend.position="bottom", legend.box = "horizontal" )
@@ -135,6 +138,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
 
 # Chart a game ------------------------------------------------------------
 
+library( njdanalytics )
 nhl_db <- setup_nhl_db()
 
 this_season     <- "20152016"
@@ -207,7 +211,7 @@ fenwick_df %>% group_by( game_num, event_team ) %>% summarize( green=n() )
 
 # single game -------------------------------------------------------------
 
-this_game_num <- 8
+this_game_num <- 2
 this_game_id4 <- shots_tbl %>% filter( game_num==this_game_num ) %>% head(1) %>% select( game_id4 ) %>% unlist(use.names = F)
 
 # get the base data for this game
