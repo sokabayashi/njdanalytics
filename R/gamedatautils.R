@@ -101,3 +101,36 @@ get_mandown_intervals <- function( shift_interval_df, game_info ) {
 
   bind_rows( mandown_times_h, mandown_times_a )
 }
+
+#'  Get data frame of goals from playbyplay for a single game.
+#'  Handles SO and OT goal cases.
+#'  For SO goal, grabs arbitrary goal from winning team.
+#'
+#' @param pbp_df A data frame of playbyplay
+#' @param game_info A data frame except of a single game from stage_game
+#' @return Data frame of goals with time as start_cum
+#' @export
+get_goals_from_pbp <- function( pbp_df, game_info ) {
+  goals_df <- pbp_df %>% filter( event_type == "GOAL" )
+
+  winning_team_short <- with( game_info, ifelse( home_score_final > away_score_final, home_team_short, away_team_short ) )
+
+  ## Shootout case: Filter out all SO goals except last one
+  if( (game_info$session_id == "1" || game_info$session_id == "2") && max(pbp_df$period) == 5 ) {
+    # SO scores keep incrementing and the way the data is written to db, we *don't* know SO winner (oh no)
+    ot_score  <- pbp_df %>% filter( event_type == "PEND", period == 4 ) # grab pre-SO score
+    so_goals  <- goals_df %>% filter( period == 5 )
+    # arbitrarily grab first goal by winning team
+    so_winner <- so_goals %>% filter( event_team == winning_team_short ) %>% head(1)
+
+    so_winner$away_score <- ot_score$away_score
+    so_winner$home_score <- ot_score$home_score
+
+    goals_df <- goals_df %>% filter( period < 5 )
+    goals_df <- bind_rows( goals_df, so_winner )
+  }
+
+  goals_df
+}
+
+

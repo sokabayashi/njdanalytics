@@ -4,9 +4,9 @@
 \name{njdanalytics-package}
 \alias{njdanalytics}
 \alias{njdanalytics-package}
-\title{njdanalytics: A package for working with data scraped from NHL.com}
+\title{njdanalytics: A package for working with NHL.com data.}
 \description{
-The njdanalytics package provides functions to work in the
+The njdanalytics package provides functions for working in the
 NJ Devils Hockey Analytics deparment
 }
 \details{

@@ -1,6 +1,6 @@
-#' njdanalytics: A package for working with data scraped from NHL.com
+#' njdanalytics: A package for working with NHL.com data.
 #'
-#' The njdanalytics package provides functions to work in the
+#' The njdanalytics package provides functions for working in the
 #' NJ Devils Hockey Analytics deparment
 #'
 #' @details Details
