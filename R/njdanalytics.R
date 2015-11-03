@@ -3,8 +3,8 @@
 #' The njdanalytics package provides functions to work in the
 #' NJ Devils Hockey Analytics deparment
 #'
-#'  @name njdanalytics
-NULL
+#' @details Details
+"_PACKAGE"
 
 .onAttach <- function( libname, pkgname ) {
   # packageStartupMessage( "" )

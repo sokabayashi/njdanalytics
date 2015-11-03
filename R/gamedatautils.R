@@ -46,7 +46,7 @@ get_num_player_intervals_ha <- function( shift_interval_df, ha = "H" ) {
 #' Get intervals for when each team is shorthanded during a game.
 #'
 #' @param shift_interval_df A data frame of shift intervals, from stage_shift_interval tbl
-#' @param game_infoA data frame of game info from stage_game
+#' @param game_info A data frame of game info from stage_game
 #' @return Data frame of all man down time intervals from a game.
 #' @export
 get_mandown_intervals <- function( shift_interval_df, game_info ) {
