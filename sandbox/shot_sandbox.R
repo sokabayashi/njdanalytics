@@ -129,7 +129,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     scale_x_continuous( breaks = seq( 0, 200, by=5 ), expand=c(0,0) ) +
     scale_y_continuous( breaks = seq( -300, 300, by=2 ), expand=c(0,0),limits=c(0,y_shot_max) ) +
     labs( title=gtitle ) + xlab( "Game Time (Minutes)" ) + ylab( "Shot Attempts") +
-    theme_few() + theme( text = element_text(size=chart_text.size),
+    theme_bw() + theme( text = element_text(size=chart_text.size),
       legend.position="bottom", legend.box = "horizontal" )
 
 
@@ -209,9 +209,15 @@ stage_playbyplay     <- stage_playbyplay     %>% filter( season==this_season, se
                                                           game_id4 %in% njd_games$game_id4 ) %>% collect() %>% arrange( start_cum )
 stage_shift_interval <- stage_shift_interval %>% filter( season==this_season, session_id==this_session_id,
                                                           game_id4 %in% njd_games$game_id4 ) %>% collect() %>% arrange( start_cum )
+# apparently on_ice_ids is not populated correctly
+stage_shift_interval <- stage_shift_interval %>% select( -on_ice_ids )
+stage_shift_interval <- stage_shift_interval %>% unite( "on_ice_ids", 32:45, sep=" ", remove=F )
+stage_shift_interval$on_ice_ids <- stage_shift_interval$on_ice_ids %>% gsub( "NA ", "", ., fixed=T )
 
 # note: we've tagged fewer games than actually played
-shots_tbl <- shots_tbl %>% left_join( njd_games, by=c( "game_num"="game_number") )
+shots_tbl <- shots_tbl %>% left_join( njd_games %>% select(
+  game_number, season, session_id, game_id4, ha ),
+  by=c( "game_num"="game_number") )
 
 # aggregate stats ---------------------------------------------------------
 
@@ -221,7 +227,7 @@ fenwick_df %>% group_by( game_num, event_team ) %>% summarize( green=n() )
 
 # single game -------------------------------------------------------------
 
-this_game_num <- 6
+this_game_num <- 8
 this_game_id4 <- shots_tbl %>% filter( game_num==this_game_num ) %>% head(1) %>% select( game_id4 ) %>% unlist(use.names = F)
 
 # get the base data for this game
@@ -237,13 +243,16 @@ goals_df             <- get_goals_from_pbp( pbp_df, game_info )
 
 # NJD perspective
 our_team <- "NJD"
+our_ah   <- "H"
 row_ha   <- "H"; col_ha   <- "A"
 if( our_team %in% c( game_info$home_team_short, game_info$away_team_short ) ) {
   # an NJD game
   if( our_team == game_info$home_team_short ) {
+    our_ha <- "H"
     their_team <- game_info$away_team_short
   } else {
     their_team <- game_info$home_team_short
+    our_ha   <- "A"
     row_ha   <- "A"
     col_ha   <- "H"
   }
@@ -259,6 +268,51 @@ game_info <- game_info %>% mutate(
 )
 
 create_shot_quality_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, param=list(ev5on5=F) )
+
+
+shots_df <- shots_df %>% mutate(
+  shift_interval_index = findInterval( shots_df$start_cum-1/60, shift_interval_df$start_cum, rightmost.closed = T )
+)
+
+shift_interval_df <- shift_interval_df %>% unite( "on_ice_ids", 32:45, sep=" ", remove=F )
+shift_interval_df$on_ice_ids <- shift_interval_df$on_ice_ids %>% gsub( " NA|NA ", "", . )
+
+shots_df$on_ice_ha_numbers <- shift_interval_df$on_ice_ha_numbers[ shots_df$shift_interval_index ]
+shots_df$on_ice_ids        <- shift_interval_df$on_ice_ids[        shots_df$shift_interval_index ]
+shots_df <- shots_df %>% mutate(
+  event_team_ha = ifelse( event_team==game_info$home_team_short, "H", "A" )
+)
+
+# strength -
+# shotcolor -
+# shot -
+
+corsi_all    <- tally_ha_number_for_against( shots_df %>% filter(), c( "CF", "CA" ) )
+corsi_ev5on5 <- tally_ha_number_for_against( shots_df %>% filter( strength=="EV 5v5"), c( "CF", "CA" ) )
+fenwick_all     <- tally_ha_number_for_against( shots_df %>% filter( shot != "BLOCK"), c( "FF", "FA" ) )
+fenwick_ev5on5  <- tally_ha_number_for_against( shots_df %>% filter( shot != "BLOCK", strength=="EV 5v5"), c( "FF", "FA" ) )
+
+green_all     <- tally_ha_number_for_against( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK"), c( "SCF", "SCA" ) )
+green_ev5on5  <- tally_ha_number_for_against( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK", strength=="EV 5v5"), c( "SCF", "SCA" ) )
+
+green_all %>% filter( ha_number== our_ha )
+green_ev5on5 %>% filter( ha_number== our_ha )
+
+# green_all %>% filter( substr(ha_number,1,1)==our_ha )
+green_ev5on5 %>% filter( substr(ha_number,1,1)==our_ha ) %>% mutate( SC_net = SCF-SCA )
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

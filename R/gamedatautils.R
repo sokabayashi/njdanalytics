@@ -134,3 +134,64 @@ get_goals_from_pbp <- function( pbp_df, game_info ) {
 }
 
 
+#'  Count for and against stats by player (ha_number) for a
+#'  single game.
+#'
+#' @param pbp A data frame of playbyplay or shots
+#' @param output_col_names A vector of names for output table
+#' @param reduce_cols Return just results.  True by default
+#' @return data frame with columns ha_number, for_col, away_col
+#' @export
+tally_ha_number_for_against <- function( pbp, output_col_names = c( "for", "against"), reduce_cols = TRUE ) {
+  # Error cases first
+  if( !nrow( pbp ) ) {
+    retval <- data_frame( ha_number=c( "H", "A") )
+    retval[ , output_col_names ] <- 0
+
+    return( retval )
+  }
+
+  event_ha_col <- unlist( pbp$event_team_ha )
+  if( !all( unique( event_ha_col ) %in% c( "H", "A")) ) {
+    # Uh oh. we've got some weird events where PBP did not specify a team and nhlscrapr did not grab a team name or H/A.
+    bad_events <- pbp %>% filter( !event_team_ha %in% c( "H", "A" ) )
+
+    message( "Removing non-standard event in pbp: ", bad_events$etext )
+    pbp <- pbp %>% filter( event_team_ha %in% c( "H", "A" ) )
+    event_ha_col <- unlist( pbp$event_team_ha )
+
+    if( !nrow( pbp ) ) {
+      retval <- data_frame( ha_number=c( "H", "A") )
+      retval[ , output_col_names ] <- 0
+
+      return( retval )
+    }
+  }
+
+  # let's go
+  on_ice_ha_numbers <- paste( "H", "A", pbp$on_ice_ha_numbers, pbp$away_goalie, pbp$home_goalie )
+  on_ice_ha_numbers <- sapply( on_ice_ha_numbers, function( my_cell) gsub( " NA|NA ", "", my_cell ) )
+
+  event_df <- data_frame( event_ha=event_ha_col, ha_number=on_ice_ha_numbers )
+  event_df <- event_df %>% mutate( ha_number=strsplit( ha_number, " " ) ) %>% unnest()
+  ha_table <- event_df %>% group_by( event_ha, ha_number ) %>% dplyr::summarize( count=n() )
+  ha_table <- ha_table %>% spread( event_ha, count, fill=0 )
+
+  # if only H or A is represented, we will only get an H or A column but not both.  we want both columns.
+  if( !"A" %in% event_ha_col ) {
+    ha_table$A <- 0
+  } else if( !"H" %in% event_ha_col ) {
+    ha_table$H <- 0
+  }
+
+  # for and against cols are relative to player's team.  H goal is GF for H player, GA for A player
+  ha_table <- ha_table %>% filter( nchar(ha_number) > 0 ) %>%
+    mutate( team_ha = substr( ha_number, 1, 1 ) )
+
+  ha_table[ output_col_names[1] ] <- ifelse( ha_table$team_ha == "H", ha_table$H, ha_table$A )
+  ha_table[ output_col_names[2] ] <- ifelse( ha_table$team_ha == "A", ha_table$H, ha_table$A )
+
+  if( reduce_cols ) ha_table <- ha_table[ , c( "ha_number", output_col_names ) ]
+
+  ha_table
+}
