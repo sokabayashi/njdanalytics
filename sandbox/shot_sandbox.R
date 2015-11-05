@@ -1,17 +1,12 @@
 
 
-create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df,
-  param=list(ev5on5=FALSE, this.game.dir=NULL) ) {
+create_shot_line_chart <- function( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df,
+    ev5on5=FALSE, shotcolor="ALL", include_blocked=F, this.game.dir=NULL) {
 
   # tedious to type out full var every time
   our_team   <- game_info$our_team
   their_team <- game_info$their_team
-  ev5on5     <- param$ev5on5
-
-  gtitle <- sprintf( "%s %s@%s: Unblocked Green Shot Attempts",
-    format( as.Date(game_info$game_date), "%a %m.%d.%y"),
-    game_info$away_team_short, game_info$home_team_short )
-  message( gtitle )
+  this_shotcolor <- shotcolor
 
   if( nrow( goals_df ) > 0 ) {
     goals_df$y.goal_text <- 0
@@ -24,37 +19,56 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
       ))
   }
 
-  green_shots <- shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK" ) %>%
-                          select( start_cum, event_team, shooter, strength )
-  green_shots <- green_shots %>% mutate(
+  chart_shots_df <- shots_df %>% mutate(
     ev5on5 = strength=="EV 5v5"
   )
 
-  if( ev5on5 ) {
-    green_shots <- green_shots %>% filter( ev5on5 )
+  # shot filters
+  if( shotcolor != "ALL" ) {
+    chart_shots_df <- chart_shots_df %>% filter( shotcolor==this_shotcolor )
   }
+  shot_text <- paste( str_to_title(this_shotcolor), "Shots" )
+
+  if( !include_blocked ) {
+    chart_shots_df <- chart_shots_df %>% filter( shot != "BLOCK" )
+    shot_text <- paste( shot_text, "(Unblocked)" )
+  }
+  if( ev5on5 ) {
+    chart_shots_df <- chart_shots_df %>% filter( ev5on5 )
+    shot_text <- paste( shot_text, " - Ev5on5 only" )
+  } else {
+    shot_text <- paste( shot_text, " - All strength" )
+  }
+  chart_shots_df <- chart_shots_df %>% select( start_cum, event_team, shooter, strength, ev5on5 )
+
+  gtitle <- sprintf( "%s %s@%s: %s",
+    format( as.Date(game_info$game_date), "%a %m.%d.%y"),
+    game_info$away_team_short, game_info$home_team_short,
+    shot_text )
+  message( gtitle )
+
 
   # Construct cumsum for each team.  There's probably an easier way.
-  our_green_shots <- green_shots %>% filter( event_team==our_team ) %>%
+  our_shots <- chart_shots_df %>% filter( event_team==our_team ) %>%
                             mutate(
                               count = cumsum( !is.na(event_team) )
                             )
-  their_green_shots <- green_shots %>% filter( event_team==their_team ) %>%
+  their_shots <- chart_shots_df %>% filter( event_team==their_team ) %>%
                             mutate(
                               count = cumsum( !is.na(event_team) )
                             )
-  green_shots_all <- bind_rows( our_green_shots, their_green_shots ) %>% select( -strength )
+  chart_shots_all <- bind_rows( our_shots, their_shots ) %>% select( -strength )
 
   # last val for each team
-  our_shot_total    <- sum( green_shots_all$event_team==our_team )
-  their_shot_total  <- sum( green_shots_all$event_team==their_team )
+  our_shot_total    <- sum( chart_shots_all$event_team==our_team )
+  their_shot_total  <- sum( chart_shots_all$event_team==their_team )
 
   # gather is the tidyr vesion of melt().  new_key_name, new_value_name, - all colnames that stay
   # green_shots_m <- green_shots_all  %>% gather( team, count, -(1:4) )
 
   # append on dummy start and end values
-  green_shots_m <- bind_rows(
-                  green_shots_all,
+  chart_shots_m <- bind_rows(
+                  chart_shots_all,
                   data_frame( start_cum=0, event_team=our_team,   ev5on5=TRUE, count=0),
                   data_frame( start_cum=0, event_team=their_team, ev5on5=TRUE, count=0),
                   data_frame( start_cum=game_info$toi_total,
@@ -74,8 +88,8 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     geom_point.size <- 2.7
   }
 
-  y.axis.min <- min( green_shots_m$count )
-  y.axis.max <- max( green_shots_m$count )
+  y.axis.min <- min( chart_shots_m$count )
+  y.axis.max <- max( chart_shots_m$count )
 
   their_color <- "grey40"
   line_colors <- setNames( c( "red", their_color ), c( our_team, their_team ))
@@ -83,7 +97,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     c( our_team, their_team ))
 
 
-  p.shots <- ggplot( green_shots_m ) # + geom_hline( aes(yintercept=0) )
+  p.shots <- ggplot( chart_shots_m ) # + geom_hline( aes(yintercept=0) )
 
   p.shots <- p.shots + geom_step( aes(x=start_cum, y=count, color=event_team),size=1.75 )
 
@@ -109,7 +123,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
 
   y_shot_max <- 1.2*y.axis.max
   p.shots <- p.shots +
-    geom_point( data=green_shots_m %>% filter( !ev5on5 ),
+    geom_point( data=chart_shots_m %>% filter( !ev5on5 ),
       aes(x=start_cum, y=count,shape=ev5on5), color="darkorange", size=geom_point.size ) +
     scale_colour_manual(name = "Team",
       values=line_colors ) +
@@ -140,6 +154,7 @@ create_shot_quality_line_chart <- function( shots_df, goals_df, mandown_interval
     file.name
     ggsave( filename = file.name, width=7.5, height=5. )
   }
+
   p.shots
 }
 
@@ -196,19 +211,29 @@ shots_tbl <- master_table %>% mutate(
 # game_info
 
 stage_game           <- tbl( nhl_db, "stage_game"           )
+stage_roster         <- tbl( nhl_db, "stage_roster"         )
 stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay"     )
 stage_shift_interval <- tbl( nhl_db, "stage_shift_interval" )
 team_score           <- tbl( nhl_db, "team_score"           )
+game_player          <- tbl( nhl_db, "game_player"          )
 
 
 njd_games         <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short=="NJD" ) %>% collect() %>% arrange( game_date )
 
 stage_game           <- stage_game           %>% filter( season==this_season, session_id==this_session_id,
                                                           game_id4 %in% njd_games$game_id4 ) %>% collect()
+stage_roster         <- stage_roster         %>% filter( season==this_season, session_id==this_session_id,
+                                                          game_id4 %in% njd_games$game_id4 ) %>% collect()
 stage_playbyplay     <- stage_playbyplay     %>% filter( season==this_season, session_id==this_session_id,
                                                           game_id4 %in% njd_games$game_id4 ) %>% collect() %>% arrange( start_cum )
 stage_shift_interval <- stage_shift_interval %>% filter( season==this_season, session_id==this_session_id,
                                                           game_id4 %in% njd_games$game_id4 ) %>% collect() %>% arrange( start_cum )
+game_player          <- game_player %>% filter( season==this_season, session_id==this_session_id,
+                                                          game_id4 %in% njd_games$game_id4,
+                                                          filter_period == "all",
+                                                          filter_strength %in% c( "ev5on5", "all" )
+                                                          ) %>% collect()
+
 # apparently on_ice_ids is not populated correctly
 stage_shift_interval <- stage_shift_interval %>% select( -on_ice_ids )
 stage_shift_interval <- stage_shift_interval %>% unite( "on_ice_ids", 32:45, sep=" ", remove=F )
@@ -234,8 +259,10 @@ this_game_id4 <- shots_tbl %>% filter( game_num==this_game_num ) %>% head(1) %>%
 this_game_score   <- njd_games %>%            filter( game_number==this_game_num )
 shots_df          <- shots_tbl %>%            filter( game_id4==this_game_id4 )
 game_info         <- stage_game %>%           filter( game_id4==this_game_id4 )
+this_roster       <- stage_roster %>%         filter( game_id4==this_game_id4 )
 pbp_df            <- stage_playbyplay %>%     filter( game_id4==this_game_id4 )
 shift_interval_df <- stage_shift_interval %>% filter( game_id4==this_game_id4 )
+this_game_player  <- game_player %>%          filter( game_id4==this_game_id4 )
 
 # meta data for chart
 mandown_intervals_df <- get_mandown_intervals( shift_interval_df, game_info )
@@ -267,44 +294,82 @@ game_info <- game_info %>% mutate(
   their_team = their_team
 )
 
-create_shot_quality_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, param=list(ev5on5=F) )
+
+create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df,
+                                ev5on5=F, shotcolor="GREEN", include_blocked=F )
 
 
 shots_df <- shots_df %>% mutate(
   shift_interval_index = findInterval( shots_df$start_cum-1/60, shift_interval_df$start_cum, rightmost.closed = T )
 )
 
-shift_interval_df <- shift_interval_df %>% unite( "on_ice_ids", 32:45, sep=" ", remove=F )
-shift_interval_df$on_ice_ids <- shift_interval_df$on_ice_ids %>% gsub( " NA|NA ", "", . )
+# shift_interval_df <- shift_interval_df %>% unite( "on_ice_ids", 32:45, sep=" ", remove=F )
+# shift_interval_df$on_ice_ids <- shift_interval_df$on_ice_ids %>% gsub( " NA|NA ", "", . )
 
-shots_df$on_ice_ha_numbers <- shift_interval_df$on_ice_ha_numbers[ shots_df$shift_interval_index ]
-shots_df$on_ice_ids        <- shift_interval_df$on_ice_ids[        shots_df$shift_interval_index ]
+matched_shift_inteval_df <- shift_interval_df[ shots_df$shift_interval_index, ]
+shots_df$on_ice_ha_numbers <- matched_shift_inteval_df$on_ice_ha_numbers
+shots_df$on_ice_ids        <- matched_shift_inteval_df$on_ice_ids
+shots_df$our_score   <- ifelse( our_ha=="H", matched_shift_inteval_df$home_score, matched_shift_inteval_df$away_score )
+shots_df$their_score <- ifelse( our_ha=="H", matched_shift_inteval_df$away_score, matched_shift_inteval_df$home_score )
+
 shots_df <- shots_df %>% mutate(
   event_team_ha = ifelse( event_team==game_info$home_team_short, "H", "A" )
 )
 
-# strength -
-# shotcolor -
-# shot -
+corsi_all       <- tally_for_against_by_ha_number( shots_df %>% filter() )
+corsi_ev5on5    <- tally_for_against_by_ha_number( shots_df %>% filter( strength=="EV 5v5") )
+fenwick_all     <- tally_for_against_by_ha_number( shots_df %>% filter( shot != "BLOCK") )
+fenwick_ev5on5  <- tally_for_against_by_ha_number( shots_df %>% filter( shot != "BLOCK", strength=="EV 5v5") )
+green_all       <- tally_for_against_by_ha_number( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK") )
+green_ev5on5    <- tally_for_against_by_ha_number( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK", strength=="EV 5v5") )
 
-corsi_all    <- tally_ha_number_for_against( shots_df %>% filter(), c( "CF", "CA" ) )
-corsi_ev5on5 <- tally_ha_number_for_against( shots_df %>% filter( strength=="EV 5v5"), c( "CF", "CA" ) )
-fenwick_all     <- tally_ha_number_for_against( shots_df %>% filter( shot != "BLOCK"), c( "FF", "FA" ) )
-fenwick_ev5on5  <- tally_ha_number_for_against( shots_df %>% filter( shot != "BLOCK", strength=="EV 5v5"), c( "FF", "FA" ) )
+game_block <- cbind( "season"=this_season, "session_id"=this_session_id, "game_id4"=this_game_id4, "game_num"=this_game_num )
+njd_chances <- rbind(
+  cbind( game_block, "metric"="corsi",   "strength"="all",    corsi_all,      stringsAsFactors=F ),
+  cbind( game_block, "metric"="corsi",   "strength"="ev5on5", corsi_ev5on5,   stringsAsFactors=F ),
+  cbind( game_block, "metric"="fenwick", "strength"="all",    fenwick_all,    stringsAsFactors=F ),
+  cbind( game_block, "metric"="fenwick", "strength"="ev5on5", fenwick_ev5on5, stringsAsFactors=F ),
+  cbind( game_block, "metric"="green",   "strength"="all",    green_all,      stringsAsFactors=F ),
+  cbind( game_block, "metric"="green",   "strength"="ev5on5", green_ev5on5,   stringsAsFactors=F )
+)
+njd_chances    <- njd_chances %>% left_join( this_roster %>% select( ha_number, nhl_id, last_name, team_short ), by="ha_number" )
+njd_chances$nhl_id[     njd_chances$ha_number==our_ha ] <- 1
+njd_chances$last_name[  njd_chances$ha_number==our_ha ] <- "NJD"
+njd_chances$team_short[ njd_chances$ha_number==our_ha ] <- "NJD"
+njd_chances <- njd_chances %>% filter( team_short=="NJD" )
 
-green_all     <- tally_ha_number_for_against( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK"), c( "SCF", "SCA" ) )
-green_ev5on5  <- tally_ha_number_for_against( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK", strength=="EV 5v5"), c( "SCF", "SCA" ) )
+# team level
+njd_team_chances <- njd_chances %>% filter( last_name=="NJD"  )
+njd_team_chances %>% filter( metric=="corsi",   strength=="ev5on5" )
+njd_team_chances %>% filter( metric=="fenwick", strength=="ev5on5" )
+njd_team_chances %>% filter( metric=="green",   strength=="all"    )
+njd_team_chances %>% filter( metric=="green",   strength=="ev5on5" )
 
-green_all %>% filter( ha_number== our_ha )
-green_ev5on5 %>% filter( ha_number== our_ha )
-
-# green_all %>% filter( substr(ha_number,1,1)==our_ha )
-green_ev5on5 %>% filter( substr(ha_number,1,1)==our_ha ) %>% mutate( SC_net = SCF-SCA )
-
-
-
+# NHL officials stats for Ev5on5
+this_game_player_ev5on5 <- this_game_player %>% filter( filter_strength=="ev5on5", filter_score_diff=="all", team_short==our_team ) %>%
+                                                select( team_ha, team_short, ha_number, nhl_id, toi,
+                                                  cf, ca, c_net, ff, fa, f_net
+                                                )
+this_game_player_ev5on5 %>% filter( nhl_id==1 )
 
 
+# Compare to NHL stats -------------------------------------------------
+# NHL stats - ours.  So, -18 means they undercounted by 18 events.
+
+# Corsi Ev5on5
+nhl_corsi_ev5on5_undercount <- this_game_player_ev5on5 %>% filter( nhl_id==1 ) %>%
+  select( cf, ca, c_net ) %>% mutate( total=cf+ca ) -
+njd_team_chances %>% filter( metric=="corsi", strength=="ev5on5" ) %>%
+            select( f, a, net ) %>% mutate( total=f+a )
+
+# Fenwick Ev5on5
+nhl_fewnick_ev5on5_undercount <- this_game_player_ev5on5 %>% filter( nhl_id==1 ) %>%
+  select( ff, fa, f_net ) %>% mutate( total=ff+fa ) -
+  njd_team_chances %>% filter( metric=="fenwick", strength=="ev5on5" ) %>%
+  select( f, a, net ) %>% mutate( total=f+a )
+
+print( nhl_corsi_ev5on5_undercount )
+print( nhl_fewnick_ev5on5_undercount )
 
 
 
