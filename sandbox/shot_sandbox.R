@@ -56,6 +56,7 @@ game_player          <- tbl( nhl_db, "game_player"          )
 
 njd_games            <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short=="NJD" ) %>%
                                        collect() %>% arrange( game_date )
+njd_games            <- add_team_score_label( njd_games, our_team="NJD" )
 stage_game           <- stage_game           %>% filter( season==this_season, session_id==this_session_id,
                                                           game_id4 %in% njd_games$game_id4 ) %>% collect()
 stage_roster         <- stage_roster         %>% filter( season==this_season, session_id==this_session_id,
@@ -75,16 +76,18 @@ stage_shift_interval <- stage_shift_interval %>% unite( "on_ice_ids", 32:45, sep
 stage_shift_interval$on_ice_ids <- stage_shift_interval$on_ice_ids %>% gsub( "NA ", "", ., fixed=T )
 
 # note: we've tagged fewer games than actually played
-shots_tbl <- shots_tbl %>% left_join( njd_games %>% select( game_number, season, session_id, game_id4, ha ),
+shots_tbl <- shots_tbl %>% left_join( njd_games %>% select( game_number, season, session_id, game_id4, ha, game_label ),
                                                       by=c( "game_num"="game_number") )
 
-
-
-# aggregate stats ---------------------------------------------------------
 
 # unblocked Green shots
 fenwick_df <- shots_tbl %>% filter(shot!="BLOCK" )
 fenwick_df %>% group_by( game_num, event_team ) %>% summarize( green=n() )
+
+
+
+
+
 
 # single game -------------------------------------------------------------
 
@@ -108,9 +111,7 @@ game_info            <- supplement_game_info( game_info, our_team="NJD" )
 create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df,
                                 ev5on5=F, shotcolor="GREEN", include_blocked=F )
 
-
-# Join green shot data to NHL data ----------------------------------------
-
+# Join green shot data to NHL shift data ----------------------------------------
 shots_df <- shots_df %>% mutate(
   shift_interval_index = findInterval( shots_df$start_cum-1/60, shift_interval_df$start_cum, rightmost.closed = T )
 )
@@ -125,8 +126,7 @@ shots_df <- shots_df %>% mutate(
   event_team_ha = ifelse( event_team==game_info$home_team_short, "H", "A" )
 )
 
-
-# tally up shots for each player ------------------------------------------
+# tally up green shots for each player ------------------------------------------
 
 corsi_all       <- tally_for_against_by_ha_number( shots_df %>% filter() )
 corsi_ev5on5    <- tally_for_against_by_ha_number( shots_df %>% filter( strength=="EV 5v5") )
@@ -158,16 +158,40 @@ njd_team_chances %>% filter( metric=="fenwick", strength=="ev5on5" )
 njd_team_chances %>% filter( metric=="green",   strength=="all"    )
 njd_team_chances %>% filter( metric=="green",   strength=="ev5on5" )
 
-# NHL stats for Ev5on5
+
+# NHL shot data tally -----------------------------------------------------
+
+# all strength
+this_game_player_all <- this_game_player %>% filter( filter_strength=="all", filter_score_diff=="all", team_short==our_team ) %>%
+                                                select( team_ha, team_short, ha_number, nhl_id, toi,
+                                                  cf, ca, c_net, ff, fa, f_net
+                                                ) %>% mutate(
+                                                  c_total = cf+ca,
+                                                  f_total = ff+fa
+                                                )
+
+# ev5on5
 this_game_player_ev5on5 <- this_game_player %>% filter( filter_strength=="ev5on5", filter_score_diff=="all", team_short==our_team ) %>%
                                                 select( team_ha, team_short, ha_number, nhl_id, toi,
                                                   cf, ca, c_net, ff, fa, f_net
+                                                ) %>% mutate(
+                                                  c_total = cf+ca,
+                                                  f_total = ff+fa
                                                 )
-# NJD team level
-this_game_player_ev5on5 %>% filter( nhl_id==1 )
 
+# NJD team level - sneak peak
+this_game_player_all    %>% filter( nhl_id==1 )
+njd_team_chances %>% filter( metric=="corsi",   strength=="all" )
+
+this_game_player_ev5on5 %>% filter( nhl_id==1 )
+njd_team_chances %>% filter( metric=="corsi",   strength=="ev5on5" )
 
 # Compare to NHL stats -------------------------------------------------
+
+
+
+
+
 # NHL stats - ours.  So, -18 means they undercounted by 18 events.
 
 # Corsi Ev5on5

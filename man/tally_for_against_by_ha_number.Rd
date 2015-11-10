@@ -5,8 +5,8 @@
 \title{Count for and against stats by player (ha_number) for a
  single game.}
 \usage{
-tally_for_against_by_ha_number(pbp, output_col_names = c("f", "a", "net"),
-  reduce_cols = TRUE)
+tally_for_against_by_ha_number(pbp, output_col_names = c("f", "a", "net",
+  "total"), reduce_cols = TRUE)
 }
 \arguments{
 \item{pbp}{A data frame of playbyplay or shots}

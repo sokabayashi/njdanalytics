@@ -142,7 +142,7 @@ get_goals_from_pbp <- function( pbp_df, game_info ) {
 #' @param reduce_cols Return just results.  True by default
 #' @return data frame with columns ha_number, for_col, away_col
 #' @export
-tally_for_against_by_ha_number <- function( pbp, output_col_names = c( "f", "a", "net" ), reduce_cols = TRUE ) {
+tally_for_against_by_ha_number <- function( pbp, output_col_names = c( "f", "a", "net", "total" ), reduce_cols = TRUE ) {
   # Error cases first
   if( !nrow( pbp ) ) {
     retval <- data_frame( ha_number=c( "H", "A") )
@@ -191,11 +191,13 @@ tally_for_against_by_ha_number <- function( pbp, output_col_names = c( "f", "a",
   ha_table[ output_col_names[1] ] <- ifelse( ha_table$team_ha == "H", ha_table$H, ha_table$A )
   ha_table[ output_col_names[2] ] <- ifelse( ha_table$team_ha == "A", ha_table$H, ha_table$A )
   ha_table[ output_col_names[3] ] <- ha_table[ output_col_names[1] ] - ha_table[ output_col_names[2] ]
+  ha_table[ output_col_names[4] ] <- ha_table[ output_col_names[1] ] + ha_table[ output_col_names[2] ]
 
   if( reduce_cols ) ha_table <- ha_table[ , c( "ha_number", output_col_names ) ]
 
   ha_table
 }
+
 
 
 #'  Add our/their perspective fields to game_info
@@ -234,4 +236,36 @@ supplement_game_info <- function( game_info, our_team="NJD" ) {
 
   game_info
 }
+
+
+#'  add a game label to team_score, good for x-axis.
+#'
+#' @param team_score_subset Excerpt of team_score, filtered already for a team
+#' @param our_team 3-letter team_short format for default perspective
+#' @return game_info data frame with additional fields of our_ha, row_ha, col_ha, our_team, their_team
+#' @export
+add_team_score_label <- function( team_score_subset, our_team="NJD" ) {
+
+  team_score_retval <- team_score_subset %>% mutate(
+    game_num_date = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, "%m/%d") ),
+    game_label    = ifelse( ha=="H", paste0( game_num_date, " ",  opp_team_short, "\n",
+                                             ga, "-", gf ),
+                                     paste0( game_num_date, " @", opp_team_short, "\n",
+                                             gf, "-", ga ) ),
+    game_label    = ifelse( overtime=="", game_label, paste0( game_label, " (", overtime, ")" ) )
+  )
+
+  # Make a factor so that G10, G11 don't comre before G1, G2
+  game_label_factor_levels <- team_score_retval %>% select( game_date, game_label ) %>% arrange( game_date ) %>%
+    select( game_label ) %>% unlist(use.names = F)
+
+  team_score_retval$game_label <- factor( team_score_retval$game_label, levels=game_label_factor_levels )
+
+  team_score_retval %>% select(-game_num_date )
+}
+
+
+
+
+
 
