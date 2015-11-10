@@ -196,3 +196,42 @@ tally_for_against_by_ha_number <- function( pbp, output_col_names = c( "f", "a",
 
   ha_table
 }
+
+
+#'  Add our/their perspective fields to game_info
+#'
+#' @param game_info A single row from stage_game
+#' @param our_team 3-letter team_short format for default perspective
+#' @return game_info data frame with additional fields of our_ha, row_ha, col_ha, our_team, their_team
+#' @export
+supplement_game_info <- function( game_info, our_team="NJD" ) {
+
+  our_ha   <- "H"; row_ha   <- "H"; col_ha   <- "A"
+  if( our_team %in% c( game_info$home_team_short, game_info$away_team_short ) ) {
+    # an NJD game
+    if( our_team == game_info$home_team_short ) {
+      our_ha <- "H"
+      their_team <- game_info$away_team_short
+    } else {
+      their_team <- game_info$home_team_short
+      our_ha   <- "A"
+      row_ha   <- "A"
+      col_ha   <- "H"
+    }
+  } else {
+    # non-NJD game, set default (row) perspective to Home team
+    our_team   <- game_info$home_team_short
+    their_team <- game_info$away_team_short
+  }
+
+  game_info <- game_info %>% mutate(
+    our_ha     = our_ha,
+    row_ha     = row_ha,
+    col_ha     = col_ha,
+    our_team   = our_team,
+    their_team = their_team
+  )
+
+  game_info
+}
+
