@@ -42,7 +42,7 @@ shots_tbl <- master_table %>% mutate(
   period_min_cum   = round( period_sec_cum/60, 3 ),
   period_clock_cum = time_decimal_to_mmss( period_min_cum ),
   start_cum        = (period-1)*20 + period_min_cum
-) %>% select( -game_num, -clock_ms, -period_sec_cum, -period_min_cum )
+) %>% select( -clock_ms, -period_sec_cum, -period_min_cum )
 
 
 # Get NHL data from our db ------------------------------------------------
@@ -101,8 +101,12 @@ fenwick_df %>% group_by( game_number, event_team ) %>% summarize( green=n() )
 min_game_number <- min( shots_tbl$game_number )
 max_game_number <- max( shots_tbl$game_number )
 
+num_games <- max_game_number - min_game_number + 1
+
 # single game -------------------------------------------------------------
 
+
+this_game_number <- 8
 for( this_game_number in min_game_number:max_game_number ) {
   message( "Process game ", this_game_number )
 
@@ -179,6 +183,49 @@ for( this_game_number in min_game_number:max_game_number ) {
   njd_team_chances %>% filter( metric=="corsi",   strength=="ev5on5" )
 
 
+
+  # pairwise shot data ------------------------------------------------------
+  # shots_df
+  # roster
+
+  goalies <- this_roster %>% filter( position=="G" ) %>% select( ha_number ) %>% unlist()
+  goalies_or <- paste(goalies, collapse="|")
+  ha_numbers <- this_roster %>% filter( position!="G" ) %>% select( ha_number ) %>%
+                              unlist(use.names = F) %>% sort()
+
+  # focus just on one team and remove goalies.  Sort ha_numbers in alphabetical order
+  shots_df <- shots_df %>% mutate(
+      ha_numbers_list = on_ice_ha_numbers %>% gsub( goalies_or, "", . ) %>%
+                                        str_extract_all( "(\\w+)" ) %>%
+                                        llply( sort ),
+      pair            = ha_numbers_list %>% laply( get_pairs_of_ha_numbers )
+  )
+
+  shots_pairs_unnested <- shots_df %>% select( event_team_ha, pair ) %>% unnest()
+  shots_pairs_table <- shots_pairs_unnested %>% group_by( pair ) %>% summarise(
+    A = sum(event_team_ha=="A"),
+    H = sum(event_team_ha=="H")
+  )
+
+# check
+# shots_df %>% filter( event_team_ha=="A", grepl( "A02", on_ice_ha_numbers ), grepl( "A14", on_ice_ha_numbers ) ) %>%
+#       select( clock, event_team_ha, on_ice_ha_numbers )
+
+  # ALL from OUR perspective, even if home
+  shots_pairs_table_colnames <- names( shots_pairs_table )[-1]
+  our_sf_col <- shots_pairs_table_colnames==game_info$our_ha
+  shots_pairs_table_colnames[  our_sf_col ] <- "sf"
+  shots_pairs_table_colnames[ !our_sf_col ] <- "sa"
+  names( shots_pairs_table )[-1] <- shots_pairs_table_colnames
+
+  shots_pairs_table <- shots_pairs_table %>% separate( pair, c("ha_number_1", "ha_number_2" ) )
+
+  njd_chances_pairs <- shots_pairs_table %>% left_join(
+    this_roster %>% select( ha_number_1=ha_number, nhl_id_1=nhl_id ), by="ha_number_1"
+  ) %>% left_join(
+    this_roster %>% select( ha_number_2=ha_number, nhl_id_2=nhl_id ), by="ha_number_2"
+  )
+
   # NHL shot data by player for this game  -----------------------------------------------------
 
   # all strength
@@ -222,7 +269,10 @@ for( this_game_number in min_game_number:max_game_number ) {
   njd_game_team$ff_pct_video[
     njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
     ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="ev5on5") %>% select( f_pct ) %>% unlist()
-}
+
+
+
+} # for loop through games
 
 
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/gamedatautils.R
 \name{add_team_score_label}
 \alias{add_team_score_label}
-\title{add a game label to team_score, good for x-axis.}
+\title{Add a game label to team_score, good for x-axis.}
 \usage{
 add_team_score_label(team_score_subset, our_team = "NJD")
 }
@@ -15,6 +15,6 @@ add_team_score_label(team_score_subset, our_team = "NJD")
 game_info data frame with additional fields of our_ha, row_ha, col_ha, our_team, their_team
 }
 \description{
-add a game label to team_score, good for x-axis.
+Add a game label to team_score, good for x-axis.
 }
 

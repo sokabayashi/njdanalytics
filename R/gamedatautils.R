@@ -238,7 +238,7 @@ supplement_game_info <- function( game_info, our_team="NJD" ) {
 }
 
 
-#'  add a game label to team_score, good for x-axis.
+#' Add a game label to team_score, good for x-axis.
 #'
 #' @param team_score_subset Excerpt of team_score, filtered already for a team
 #' @param our_team 3-letter team_short format for default perspective
@@ -265,6 +265,14 @@ add_team_score_label <- function( team_score_subset, our_team="NJD" ) {
 }
 
 
+#' Get every pair combination from a vector of players.
+#'
+#' @param ha_numbers Vector of ha_number, already sorted alphabetically
+#' @return list of every pairwise combination
+#' @export
+get_pairs_of_ha_numbers <- function( ha_numbers ) {
+  ha_numbers %>% combn(2, simplify=F) %>% laply(paste, collapse=" " ) %>% list()
+}
 
 
 
