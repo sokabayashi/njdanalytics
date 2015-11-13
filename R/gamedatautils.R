@@ -142,7 +142,7 @@ get_goals_from_pbp <- function( pbp_df, game_info ) {
 #' @param reduce_cols Return just results.  True by default
 #' @return data frame with columns ha_number, for_col, away_col
 #' @export
-tally_for_against_by_ha_number <- function( pbp, output_col_names = c( "f", "a", "net", "total" ), reduce_cols = TRUE ) {
+tally_for_against_by_ha_number <- function( pbp, output_col_names = c( "scf", "sca", "sc_net", "sc_total" ), reduce_cols = TRUE ) {
   # Error cases first
   if( !nrow( pbp ) ) {
     retval <- data_frame( ha_number=c( "H", "A") )
