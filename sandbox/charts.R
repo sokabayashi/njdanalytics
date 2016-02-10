@@ -25,7 +25,9 @@ create_shot_line_chart <- function( shots_df, goals_df, mandown_intervals_df, ga
   )
 
   # shot filters
-  if( shotcolor != "ALL" ) {
+  if( shotcolor == "GREENBLUE" ) {
+    chart_shots_df <- chart_shots_df %>% filter( shotcolor %in% c("GREEN", "BLUE") )
+  } else if( shotcolor != "ALL" ) {
     chart_shots_df <- chart_shots_df %>% filter( shotcolor==this_shotcolor )
   }
   shot_text <- paste( str_to_title(this_shotcolor), "Shots" )
@@ -126,8 +128,7 @@ create_shot_line_chart <- function( shots_df, goals_df, mandown_intervals_df, ga
   p.shots <- p.shots +
     geom_point( data=chart_shots_m %>% filter( !ev5on5 ),
       aes(x=start_cum, y=count,shape=ev5on5), color="darkorange", size=geom_point.size ) +
-    scale_colour_manual(name = "Team",
-      values=line_colors ) +
+    scale_colour_manual(name = "Team", values=line_colors ) +
     scale_shape_manual( name="", values=c(17,18), labels=c("Non-5on5 shot attempt", "even") )
 
   if( nrow( goals_df) > 0 ) {
@@ -135,7 +136,7 @@ create_shot_line_chart <- function( shots_df, goals_df, mandown_intervals_df, ga
 
     goals_df$y.goal_text <- 1.1*y.axis.max
     p.shots <- p.shots + geom_text( data=goals_df, aes(label=goal_text, x=start_cum, y=y.goal_text, color=event_team),
-      angle=90, show_guide=F, hjust= 0.8, size=geom_text.size, vjust=-0.4 )
+      angle=90, show.legend=F, hjust= 0.8, size=geom_text.size, vjust=-0.4 )
   }
 
   # cosmetic chart stuff here
