@@ -10,4 +10,4 @@ License: file LICENSE
 LazyData: TRUE
 Depends:
     nhlutils
-RoxygenNote: 5.0.0
+RoxygenNote: 5.0.1
