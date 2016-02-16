@@ -1,7 +1,7 @@
 library( njdanalytics )
 nhl_db <- setup_nhl_db()
 
-source( paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/charts.R" ) )
+# source( paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/charts.R" ) )
 this_season     <- "20152016"
 this_session_id <- "2"
 our_team        <- "NJD"
@@ -9,9 +9,9 @@ our_team        <- "NJD"
 # Get green shot data file ------------------------------------------------
 
 # Callie's Access file, exported to xlsx
-master_table_file  <- paste0( nhl_dir$shotdata, "/Master Table.xlsx" )
-master_table_file2 <- paste0( nhl_dir$shotdata, "/Master Table2.xlsx" )
-mismatch_ev5on5_file <- paste0(nhl_dir$shotdata, "/mismatch_ev5on5.csv")
+master_table_file  <- paste0( nhl_dir$shot, "/Master Table.xlsx" )
+master_table_file2 <- paste0( nhl_dir$shot, "/Master Table2.xlsx" )
+mismatch_ev5on5_file <- paste0(nhl_dir$shot, "/mismatch_ev5on5.csv")
 if( file.exists(mismatch_ev5on5_file) ) {
   file.remove( mismatch_ev5on5_file )
 }
@@ -156,11 +156,11 @@ for( this_game_number in game_numbers ) {
   game_info            <- supplement_game_info( game_info, our_team="NJD" )
 
   # CHART
-  # create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="ALL", include_blocked=T )
-  # create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREEN", include_blocked=F )
-  # create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="BLUE", include_blocked=F )
+  # create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="ALL", include_blocked=T )
+  # create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREEN", include_blocked=F )
+  # create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="BLUE", include_blocked=F )
 
-  # create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREENBLUE", include_blocked=F )
+  # create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREENBLUE", include_blocked=F )
 
   # Join green shot data to NHL shift interval (on ice player) data ----------------------------------------
   # Do this one game at a time since 0-60 min will occur in every game.
@@ -313,11 +313,12 @@ for( this_game_number in game_numbers ) {
       ha_numbers_list = on_ice_ha_numbers %>% gsub( goalies_or, "", . ) %>%
                                         str_extract_all( "(\\w+)" ) %>%
                                         llply( sort ),
-      pair            = ha_numbers_list %>% laply( get_pairs_of_ha_numbers )
+      pair            = ha_numbers_list %>% laply( get_pairs_of_ha_numbers ),
+      unblocked       =shot != "BLOCK"
   )
 
-  shots_pairs_unnested <- shots_df %>% select( event_team_ha, pair ) %>% unnest()
-  shots_pairs_table <- shots_pairs_unnested %>% group_by( pair ) %>% summarise(
+  shots_pairs_unnested <- shots_df %>% filter( unblocked ) %>% select( shotcolor, event_team_ha, pair ) %>% unnest()
+  shots_pairs_table <- shots_pairs_unnested %>% group_by( pair, shotcolor ) %>% summarise(
     A = sum(event_team_ha=="A"),
     H = sum(event_team_ha=="H")
   )
@@ -325,15 +326,17 @@ for( this_game_number in game_numbers ) {
 # check
 # shots_df %>% filter( event_team_ha=="A", grepl( "A02", on_ice_ha_numbers ), grepl( "A14", on_ice_ha_numbers ) ) %>%
 #       select( clock, event_team_ha, on_ice_ha_numbers )
+  shots_pairs_table <- shots_pairs_table %>% ungroup() %>% separate( pair, c("ha_number_1", "ha_number_2" ) )
 
   # ALL from OUR perspective, even if home
-  shots_pairs_table_colnames <- names( shots_pairs_table )[-1]
-  our_sf_col <- shots_pairs_table_colnames==game_info$our_ha
-  shots_pairs_table_colnames[  our_sf_col ] <- "sf"
-  shots_pairs_table_colnames[ !our_sf_col ] <- "sa"
-  names( shots_pairs_table )[-1] <- shots_pairs_table_colnames
+  shots_pairs_table_colnames <- names( shots_pairs_table )
+  our_sf_col   <- shots_pairs_table_colnames==game_info$our_ha
+  their_sf_col <- shots_pairs_table_colnames==game_info$their_ha
+  shots_pairs_table_colnames[ our_sf_col   ] <- "sf" # SF NJD
+  shots_pairs_table_colnames[ their_sf_col ] <- "sa" # SA NJD
+  names( shots_pairs_table ) <- shots_pairs_table_colnames
 
-  shots_pairs_table <- shots_pairs_table %>% separate( pair, c("ha_number_1", "ha_number_2" ) )
+
 
   njd_chances_pairs <- shots_pairs_table %>% left_join(
     this_roster %>% select( ha_number_1=ha_number, nhl_id_1=nhl_id ), by="ha_number_1"
@@ -403,7 +406,7 @@ njd_player_chances_df <- do.call("rbind", njd_player_chances )
 
 njd_players_by_game   <- njd_player_chances_df %>% filter( team_short=="NJD" ) %>%
                           left_join( player_tbl %>% select( nhl_id, position_fd, number ), by="nhl_id" )
-save( njd_players_by_game, file=paste0( nhl_dir$shotdata, "/njd_through_51.RData" ))
+save( njd_players_by_game, file=paste0( nhl_dir$shot, "/njd_through_55.RData" ))
 
 
 
@@ -565,13 +568,14 @@ print( nhl_fewnick_ev5on5_undercount )
 
 # vs a specific team ------------------------------------------------------
 
-opponent <- "TOR"
+opponent <- "PHI"
 games_vs_opp <- njd_games %>% filter( opp_team_short==opponent )
 
 this_game_number <- games_vs_opp$game_number
-this_game_number <- 51
-player_chances_vs_opp <- njd_player_chances_df %>% filter( game_number %in% games_vs_opp$game_number )
+
 # or perhaps we know the exact game number
+this_game_number <- 56
+player_chances_vs_opp <- njd_player_chances_df %>% filter( game_number %in% games_vs_opp$game_number )
 
 # or perhaps we want season to date NJD only
 # player_chances_vs_opp <- njd_player_chances_df %>% filter( team_short=="NJD" )
@@ -591,16 +595,26 @@ pbp_df            <- stage_playbyplay %>%     filter( game_id4==this_game_id4 )
 shift_interval_df <- stage_shift_interval %>% filter( game_id4==this_game_id4 )
 this_game_player  <- game_player %>%          filter( game_id4==this_game_id4 )
 
+# append faceoff count and L/R shot
+roster_skaters <- augment_roster( this_roster, pbp_df, player_tbl )
+shared_toi_ev  <- shift_interval_df %>% filter( num_skaters_h==5, num_skaters_a==5, num_goalies_h==1, num_goalies_a==1 )
+toi_matrix_ev  <- get_toi_matrix( this_roster, shared_toi_ev ) # need to pass *original* roster
+
+# # sort roster by lines, pairings.
+
+# debugonce(group_roster_by_lines)
+roster_sorted  <- group_roster_by_lines( roster_skaters, toi_matrix_ev, strength="ev5on5" )
+
 # meta data for chart
 mandown_intervals_df <- get_mandown_intervals( shift_interval_df, game_info )
 goals_df             <- get_goals_from_pbp( pbp_df, game_info )
 game_info            <- supplement_game_info( game_info, our_team="NJD" )
 
 # CHART
- create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREEN", include_blocked=F )
- create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="BLUE", include_blocked=F )
+ create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREEN", include_blocked=F )
+ create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="BLUE", include_blocked=F )
 
- create_shot_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREENBLUE", include_blocked=F )
+ create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="GREENBLUE", include_blocked=F )
 
  foo_ev <- shots_df %>% filter( shot != "BLOCK", strength=="EV 5v5", shotcolor %in% c( "BLUE", "GREEN") ) %>%
    group_by( shotcolor, period, event_team ) %>%
@@ -619,8 +633,8 @@ game_info            <- supplement_game_info( game_info, our_team="NJD" )
  ggplot(foo_ev, aes(x=period,y=count)) +
    geom_bar(data=foo_ev %>% filter( event_team=="NJD"), stat = "identity", aes(fill=shotcolor)) +
    geom_bar(data=foo_ev %>% filter(event_team!="NJD"), aes(y=-count),  fill="firebrick2", stat = "identity") +
-   geom_text(data=foo_ev %>% filter( event_team=="NJD"),aes(label=count), vjust=-0.1)+
-   geom_text(data=foo_ev %>% filter( event_team!="NJD"),aes(y=-count,label=count), vjust=-0.5)+
+   geom_text(data=foo_ev %>% filter( event_team=="NJD"),aes(label=count), vjust=-0.1, size=3)+
+   geom_text(data=foo_ev %>% filter( event_team!="NJD"),aes(y=-count,label=count), size=3,vjust=-0.5)+
    geom_hline(yintercept = 0) +
    scale_x_continuous("Period" ) +
    scale_fill_manual( values=c( "BLUE"="slateblue2", "GREEN"="springgreen4") ) +
@@ -631,8 +645,8 @@ game_info            <- supplement_game_info( game_info, our_team="NJD" )
  ggplot(foo_other, aes(x=period,y=count)) +
    geom_bar(data=foo_other %>% filter( event_team=="NJD"), stat = "identity", aes(fill=shotcolor)) +
    geom_bar(data=foo_other %>% filter(event_team!="NJD"), aes(y=-count),  fill="firebrick2", stat = "identity") +
-   geom_text(data=foo_other %>% filter( event_team=="NJD"),aes(label=count), vjust=-0.1)+
-   geom_text(data=foo_other %>% filter( event_team!="NJD"),aes(y=-count,label=count), vjust=-0.5)+
+   geom_text(data=foo_other %>% filter( event_team=="NJD"),aes(label=count), vjust=-0.1,size=3)+
+   geom_text(data=foo_other %>% filter( event_team!="NJD"),aes(y=-count,label=count), vjust=-0.5,size=3)+
    geom_hline(yintercept = 0) +
    scale_x_continuous("Period" ) +
    scale_fill_manual( values=c( "BLUE"="slateblue2", "GREEN"="springgreen4") ) +
@@ -729,6 +743,10 @@ player_stats[ is.na(player_stats) ] <- 0
 #   blue_i_other  = blue_i - blue_i_ev
 # )
 
+# SORT PLAYERS IF ONLY ONE GAME
+player_stats <- player_stats %>% left_join( roster_sorted %>% select( nhl_id, rank_toi_ev5on5_adj), by="nhl_id" ) %>%
+                          arrange( rank_toi_ev5on5_adj )
+
 player_stats_brief <- player_stats %>% select( team_short, last_name, number, position_fd,
                                                gm, toi_gm, toi_gm_ev,
                                                green_net, blue_net, greenblue_net,
@@ -739,15 +757,18 @@ brief_col_names <- c( "Team", "Player", "Number", "Pos", "Games", "TOI/Gm", "TOI
                       "Blue i EV", "Blue i PP",
                       "Shot Attempts Individual" )
 
-player_stats_brief <- player_stats_brief %>% filter( position_fd != "G" ) %>% arrange( team_short, desc(position_fd), desc(toi_gm) )
+player_stats_brief <- player_stats_brief %>% filter( position_fd != "G" )
 names(player_stats_brief) <- brief_col_names
 
-# write_csv( player_stats_brief, path=paste0(nhl_dir$shotdata, "/opponent/NJD_through_gm50.csv") )
+# write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/NJD_through_gm50.csv") )
 
-write_csv( player_stats_brief, path=paste0(nhl_dir$shotdata, "/opponent/gm51_NYR.csv") )
+write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/gm56_PHI.csv") )
 
 player_chances_vs_opp_ev %>% filter( metric=="corsi", last_name=="NJD" )
-player_chances_vs_opp_all %>% filter( metric=="fenwick", last_name=="NJD" )
+player_chances_vs_opp_ev %>% filter( metric=="fenwick", last_name=="NJD" )
+player_chances_vs_opp_all %>% filter( metric=="green", last_name=="NJD" )
+player_chances_vs_opp_all %>% filter( metric=="blue", last_name=="NJD" )
+
 player_chances_vs_opp_ev %>% filter( metric=="green", last_name=="NJD" )
 player_chances_vs_opp_ev %>% filter( metric=="blue", last_name=="NJD" )
 
@@ -792,7 +813,7 @@ brief_col_names <- c( "Team", "Player", "Number", "Pos", "Games", "TOI/Gm", "TOI
 njd_stats_summary <- njd_stats_summary %>% filter( position_fd != "G" ) %>% arrange( team_short, desc(position_fd), desc(toi_gm) )
 names(njd_stats_summary) <- brief_col_names
 
-write_csv( njd_stats_summary %>% filter( Team=="NJD" ), path=paste0(nhl_dir$shotdata, "/NJD_through_gm50.csv") )
+write_csv( njd_stats_summary %>% filter( Team=="NJD" ), path=paste0(nhl_dir$shot, "/NJD_through_gm50.csv") )
 
 
 save( )

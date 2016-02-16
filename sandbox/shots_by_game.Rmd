@@ -33,7 +33,7 @@ njd_games            <- add_team_score_label( njd_games, our_team="NJD" ) %>%
 ```
 
 ```{r data sets}
-load( file=paste0( nhl_dir$shotdata, "/njd_through_50.RData" ) )
+load( file=paste0( nhl_dir$shots, "/njd_through_50.RData" ) )
 njd_summary_spreadsheet <- paste0( nhl_dir$shot, "/NJD_through_gm50.xlsx" )
 njd_summary <- read_excel( njd_summary_spreadsheet, skip=1)
 
