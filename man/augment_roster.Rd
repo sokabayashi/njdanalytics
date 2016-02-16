@@ -2,7 +2,7 @@
 % Please edit documentation in R/shiftintervalutils.R
 \name{augment_roster}
 \alias{augment_roster}
-\title{Add faceoff count and shot (L/R) to roster}
+\title{Augment roster data frame}
 \usage{
 augment_roster(roster, pbp_df, player)
 }

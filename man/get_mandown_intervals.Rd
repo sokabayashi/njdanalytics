@@ -2,7 +2,7 @@
 % Please edit documentation in R/shiftintervalutils.R
 \name{get_mandown_intervals}
 \alias{get_mandown_intervals}
-\title{Get intervals for when each team is shorthanded during a game.}
+\title{Get mandown intervals}
 \usage{
 get_mandown_intervals(shift_interval_df, game_info)
 }

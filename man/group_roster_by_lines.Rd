@@ -2,14 +2,14 @@
 % Please edit documentation in R/shiftintervalutils.R
 \name{group_roster_by_lines}
 \alias{group_roster_by_lines}
-\title{Group line & D pairs together within a line}
+\title{Group roster by lines}
 \usage{
 group_roster_by_lines(roster, toi_matrix, strength = "ev5on5")
 }
 \arguments{
 \item{roster}{Augmented roster with faceoff count and shot added.}
 
-\item{toi_matrix}{Matrix of ice time with ha_number as row and col names.}
+\item{toi_matrix}{Matrix of Ev5on5 ice time with ha_number as row and col names.}
 
 \item{strength}{String, "ev5on5" by default.  Not used currently.}
 }
@@ -17,6 +17,6 @@ group_roster_by_lines(roster, toi_matrix, strength = "ev5on5")
 Data frame of roster sorted by lines and D pairs.
 }
 \description{
-Group line & D pairs together within a line
+Group forward line & D pairs together within each team's roster
 }
 

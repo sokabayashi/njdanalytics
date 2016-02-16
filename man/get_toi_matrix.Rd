@@ -2,19 +2,20 @@
 % Please edit documentation in R/shiftintervalutils.R
 \name{get_toi_matrix}
 \alias{get_toi_matrix}
-\title{Get TOI Matrix}
+\title{Get EV5on5 TOI Matrix}
 \usage{
-get_toi_matrix(roster, shared_toi_ev)
+get_toi_matrix(roster, shared_toi)
 }
 \arguments{
-\item{roster}{Roster for a game, as pulled from stage_game tbl}
+\item{roster}{Roster for a game including Goalies, as pulled from stage_game tbl}
 
-\item{shared_toi_ev}{Shift interval, as pulled from stage_shift_interval, filtered for EV5on5.}
+\item{shared_toi}{Shift interval, as pulled from `stage_shift_interval`.
+Usually filtered for EV5on5.}
 }
 \value{
-matrix of TOI with ha_number as row and col names
+matrix TOI with ha_number as row and col names
 }
 \description{
-Get TOI Matrix
+Get EV5on5 TOI Matrix
 }
 

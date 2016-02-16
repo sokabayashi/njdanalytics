@@ -40,6 +40,8 @@ get_num_player_intervals_ha <- function( shift_interval_df, ha = "H" ) {
 # assume opponent does not score.
 # we will get 3 rows: a 30 sec 5on4, a 1:30 5on3, a 30 sec 5on4.
 
+#' Get mandown intervals
+#'
 #' Get intervals for when each team is shorthanded during a game.
 #'
 #' @param shift_interval_df A data frame of shift intervals, from stage_shift_interval tbl
@@ -99,11 +101,12 @@ get_mandown_intervals <- function( shift_interval_df, game_info ) {
   bind_rows( mandown_times_h, mandown_times_a )
 }
 
-
-#' Group line & D pairs together within a line
+#' Group roster by lines
+#'
+#' Group forward line & D pairs together within each team's roster
 #'
 #' @param roster Augmented roster with faceoff count and shot added.
-#' @param toi_matrix Matrix of ice time with ha_number as row and col names.
+#' @param toi_matrix Matrix of Ev5on5 ice time with ha_number as row and col names.
 #' @param strength String, "ev5on5" by default.  Not used currently.
 #'
 #' @return Data frame of roster sorted by lines and D pairs.
@@ -211,6 +214,8 @@ group_roster_by_lines <- function( roster, toi_matrix, strength="ev5on5" ) {
 }
 
 
+#' Augment roster data frame
+#'
 #' Add faceoff count and shot (L/R) to roster
 #'
 #' @param roster Roster, as pulled from stage_roster.
@@ -218,6 +223,7 @@ group_roster_by_lines <- function( roster, toi_matrix, strength="ev5on5" ) {
 #' @param player Player data from player tbl.
 #'
 #' @return Data frame of roster with additional columns
+#' @export
 augment_roster <- function( roster, pbp_df, player ) {
   # Figure out our centers. Make C the first row on a forward line.
   faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 )
@@ -228,20 +234,22 @@ augment_roster <- function( roster, pbp_df, player ) {
   roster_augmented <- roster %>% filter( position != "G" ) %>% arrange( ha_number )
   roster_augmented <- roster_augmented %>%
                         left_join( centers_df, by="ha_number" ) %>%
-                        left_join( player %>% select( nhl_id, shoots ), by="nhl_id" )
+                        left_join( player %>% select( nhl_id, shoots ), by="nhl_id" ) %>%
+                        mutate( num_last_name=paste0( number, last_name ) )
   roster_augmented
 }
 
-#' Get TOI Matrix
+#' Get EV5on5 TOI Matrix
 #'
-#' @param roster Roster for a game, as pulled from stage_game tbl
-#' @param shared_toi_ev Shift interval, as pulled from stage_shift_interval, filtered for EV5on5.
+#' @param roster Roster for a game including Goalies, as pulled from stage_game tbl
+#' @param shared_toi Shift interval, as pulled from `stage_shift_interval`.
+#' Usually filtered for EV5on5.
 #'
-#' @return matrix of TOI with ha_number as row and col names
+#' @return matrix TOI with ha_number as row and col names
 #' @export
 get_toi_matrix <- function(
                             roster, # must be full roster, including G
-                            shared_toi_ev ) {
+                            shared_toi ) {
   goalies <- roster %>% filter( position=="G" ) %>% select( ha_number ) %>% unlist()
   goalies_or <- paste(goalies, collapse="|") # could have multiple goalies per team.
 
@@ -253,7 +261,7 @@ get_toi_matrix <- function(
   # focus just on one team and remove goalies.  Sort ha_numbers in alphabetical order
   # Q: will this sort guarantee that I can just focus on ther upper triangular matrix?
   # I THINK SO.
-  toi_df   <- shared_toi_ev %>% select( duration, on_ice_ha_numbers )
+  toi_df   <- shared_toi %>% select( duration, on_ice_ha_numbers )
 
   toi_pairs_df <- toi_df %>% mutate(
     ha_numbers_list = on_ice_ha_numbers %>% gsub( goalies_or, "", . ) %>%

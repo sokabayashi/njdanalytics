@@ -1,29 +1,27 @@
-#' Create player heatmap.
+#' Create player heatmap for TOI or shot diff.  Can be same team or h2h.  Game level or across games.
 #'
-#' @param game_info from stage_game
-#' @param my_matrix
+#' @param my_matrix Symmetric matrix populated with TOI or shot differential
+#' @param game_info from stage_game.  If NULL, then data is not from a single game
 #' @param row_ha "H" or "A" of row team
-#' @param col_ha "H" or "A" of row team
-#' @param our_team_short
+#' @param col_ha "H" or "A" of col team
+#' @param our_team_short "NJD" by default
 #' @param matrix_type "TOI" or "Corsi"
 #' @param strength Filename suffix
 #' @param filter_period "all" by default
 #' @param row_num_D 6 by default.  But sometimes it is 7
-#' @param col_num_D 5 by default.  But sometimes it is 7
+#' @param col_num_D 6 by default.  But sometimes it is 7
 #' @param minutes_played Number of minutes played for chart title
 #' @param fig_dir Directory where to save file
 #'
-#' @return
+#' @return None.  ggplot chart created.
 #' @export
 #'
-#' @examples
 create_player_heatmap <- function(
-  game_info, my_matrix,
+  my_matrix,
+  game_info,
   row_ha="H", col_ha="H",
   our_team_short="NJD",
-  matrix_type="TOI",
-  strength="ev5on5",
-  filter_period="all",
+  matrix_type="TOI", strength="ev5on5", filter_period="all",
   row_num_D=6, col_num_D=6,
   minutes_played=60, fig_dir ) {
 
@@ -48,7 +46,7 @@ create_player_heatmap <- function(
   }
 
   row_team <- col_team <- title_team <- ""
-  ## for single team matrix, add team name to title but no row and col labels
+  ## for single team matrix, add team name to title only.  No row and col labels
   if( col_ha == row_ha ) {
     title_team <- game_info$home_team
     if( col_ha == "A" ) {
@@ -85,13 +83,12 @@ create_player_heatmap <- function(
 
   color.separator <- "red2"
   base_size <- 5.3
-
   nrow.toi <- nrow( my_matrix )
   # melt matrix into df for ggplot.  Note row order reversal for plotting purposes
   my.melt <- melt( my_matrix[ nrow.toi:1, ], varnames=c( "p1", "p2" ), value.name="value", colour="white" )
 
   if( matrix_type=="TOI") {
-    # don't even display TOI < 1.0
+    # Don't display TOI < 1.0. Leaving blank is actually easier to read
     my.melt$value <- ifelse( my.melt$value < 1, 0, abs(my.melt$value) )
     my.melt$value.display  <- sprintf( sprintf.display, round(my.melt$value,1) )
 
@@ -99,13 +96,13 @@ create_player_heatmap <- function(
     if( row_ha == col_ha ) {
       toi_high_cutoff <- 11
     } else {
-      toi_high_cutoff <- 7 # h2h2
+      toi_high_cutoff <- 7 # h2h chart will have lower values
     }
     my.melt$value <- pmin( my.melt$value, toi_high_cutoff )
 
-    # below 3 min, it's 0 for fill fill purposes
+    # below 3 min, it's 0 for fill purposes
     toi_low_cutoff  <- 3
-    my.melt$value <- ifelse( abs(my.melt$value)<= toi_low_cutoff, 0, my.melt$value )
+    my.melt$value <- ifelse( abs(my.melt$value) <= toi_low_cutoff, 0, my.melt$value )
   } else {
     # Corsi chart
     my.melt$value.display  <- sprintf( sprintf.display, round(my.melt$value,1) )
@@ -113,12 +110,9 @@ create_player_heatmap <- function(
     corsi_cutoff  <- 3
     my.melt$value <- ifelse( abs(my.melt$value)<= corsi_cutoff, 0, my.melt$value )
   }
-
   # don't print 0s
   my.melt$value.display  <- ifelse( my.melt$value.display == "0" | my.melt$value.display == "0.0",
     "", my.melt$value.display )
-
-
   my.melt$value.display.x <- as.numeric(my.melt$p2) + text.x.adj # fudge factor to get number centered
 
   # make disparity in fill colors wider
@@ -161,7 +155,10 @@ create_player_heatmap <- function(
       axis.text.x = element_text( size = base_size,  angle = 90, hjust = 0, vjust = 0.5 )
     )
 
-  ## Move x-axis to top
+  ## Move x-axis to top.  This next block of code is really messy
+  # most because I don't understand grobs so well but also because changes in ggplot2
+  # also mucked the behavior of the previously working version.
+
   # extract gtable. start with 8 grobs
   g <- ggplot_gtable(ggplot_build(p.mat))
 
@@ -183,18 +180,17 @@ create_player_heatmap <- function(
   g <- gtable_add_rows(g, g$heights[1], 1)
   g <- gtable_add_grob(g, g$grobs[[6]], 2, 4, 2, 4) ## add axis label to top
 
-
   # drop old axis
   g$grobs[[ia]]$children[[2]] <- NULL # new 12/21/15
-  #   ia <- which(g$layout$name == "xlab")
-  #   g$grobs[[ia]]$label = ''
+  # ia <- which(g$layout$name == "xlab")
+  # g$grobs[[ia]]$label = ''
   #
   # g$grobs[[ia]]$children[2]$axis$grobs[[2]]$label <- ""
   # g$grobs[[6]]$children[[2]] <- NULL # new 12/21/15
   # g$grobs[[6]]$label <- ""
   g$grobs[[6]] <- nullGrob() # new 21/21/15
 
-  #   # reduce some margin
+  # reduce some margin
   ia_out <- g$layout[ia,]$t
 
   # g$grobs[[ia_out]]$label = ''
@@ -202,12 +198,9 @@ create_player_heatmap <- function(
   #
   g <- gtable_trim( g )
   g <- gtable_add_rows(g, unit(10,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
-  #
-
   # g[["widths"]][3] <- list(unit(0.5, "line"))
 
-  # draw it
-  # grid.newpage()
+  # grid.newpage() # draw it
 
   # Output file -------------------------------------------------------------
   gtitle <- sprintf( "%s %s-%s: %s %s EV5on5",
@@ -219,8 +212,6 @@ create_player_heatmap <- function(
   } else {
     gtitle <- paste0( gtitle, " - P", filter_period )
   }
-
-
 
   if( row_team == col_team ) {
     if( row_ha == "H" ) {
@@ -257,6 +248,7 @@ create_player_heatmap <- function(
 }
 
 
+
 #' Create Shot Color line chart.
 #'
 #' @param shots_df Data frame from Green shot quality project
@@ -269,7 +261,7 @@ create_player_heatmap <- function(
 #' @param include_blocked If \code{TRUE}, includes Blocked shots.
 #' @param fig_dir
 #'
-#' @return chart
+#' @return None.  ggplot chart created.
 #' @export
 #'
 create_shotcolor_line_chart <- function( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df,
