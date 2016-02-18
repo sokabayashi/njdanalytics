@@ -231,11 +231,11 @@ augment_roster <- function( roster, pbp_df, player ) {
   centers_df      <- faceoff_cnt_df %>% group_by( ha_number ) %>% summarize( faceoff_cnt=n() )
 
   # Also nice to have L/R shot for D pairing.
-  roster_augmented <- roster %>% filter( position != "G" ) %>% arrange( ha_number )
+  roster_augmented <- roster %>% arrange( ha_number )
   roster_augmented <- roster_augmented %>%
                         left_join( centers_df, by="ha_number" ) %>%
                         left_join( player %>% select( nhl_id, shoots ), by="nhl_id" ) %>%
-                        mutate( num_last_name=paste0( number, last_name ) )
+                        mutate( num_last_name=paste( number, last_name ) )
   roster_augmented
 }
 
@@ -294,6 +294,24 @@ get_toi_matrix <- function(
   toi_matrix
 }
 
+
+# get_toi_matrix_from_h2h <- function(
+#   toi_h2h
+#   ) {
+#   # all ha_numbers from both teams. h2h already excludes G and is symmetric.
+#   ha_numbers  <- toi_h2h$ha_number_1 %>% unique() %>% sort()
+#   nhl_ids     <- toi_h2h$nhl_id_1 %>% unique() %>% sort()
+#   num_skaters <- length( ha_numbers )
+#
+#   toi_matrix <- matrix( 0, nrow=num_skaters, ncol=num_skaters )
+#   rownames( toi_matrix ) <- colnames( toi_matrix ) <- nhl_ids
+#
+#   toi_h2h_melt <- toi_h2h %>% select( nhl_id_1, nhl_id_2, toi_period_all ) %>% as.matrix()
+#
+#
+#   toi_matrix[ toi_h2h_melt[,1:2] %>% as.matrix() ] <- toi_h2h_melt[ ,"toi_period_all"]
+# }
+#
 
 # let's go ----------------------------------------------------------------
 

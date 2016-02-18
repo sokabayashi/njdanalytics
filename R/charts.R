@@ -12,8 +12,9 @@
 #' @param col_num_D 6 by default.  But sometimes it is 7
 #' @param minutes_played Number of minutes played for chart title
 #' @param fig_dir Directory where to save file
+#' @param save_file FALSE by default
 #'
-#' @return None.  ggplot chart created.
+#' @return ggplot chart
 #' @export
 #'
 create_player_heatmap <- function(
@@ -23,7 +24,7 @@ create_player_heatmap <- function(
   our_team_short="NJD",
   matrix_type="TOI", strength="ev5on5", filter_period="all",
   row_num_D=6, col_num_D=6,
-  minutes_played=60, fig_dir ) {
+  minutes_played=60, fig_dir, save_file=FALSE ) {
 
   file.suffix     <- "toi"
   title.type      <- "TOI"
@@ -46,7 +47,7 @@ create_player_heatmap <- function(
   }
 
   row_team <- col_team <- title_team <- ""
-  ## for single team matrix, add team name to title only.  No row and col labels
+  ## for single team matrix, add team name to title only.  No row and col labels needed
   if( col_ha == row_ha ) {
     title_team <- game_info$home_team
     if( col_ha == "A" ) {
@@ -133,7 +134,7 @@ create_player_heatmap <- function(
   # F/D separators
   p.mat <- p.mat + geom_vline( xintercept=x.line.separators, size=0.25,  color=color.separator ) +
     geom_hline( yintercept=y.line.separators, size=0.25, color=color.separator ) +
-    geom_vline( xintercept=x.FD.separators,   size=0.25, color="black"         ) +
+    geom_vline( xintercept=x_FD.separators,   size=0.25, color="black"         ) +
     geom_hline( yintercept=y.FD.separators,   size=0.25, color="black" )
 
   # axis djustments
@@ -234,6 +235,227 @@ create_player_heatmap <- function(
   message( gtitle )
   # png( filename = plot.file, width=700, height=700 )
 
+  png( filename = plot.file, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
+  par(
+    mar      = c(0, 0, 0, 0),
+    xaxs     = "i",
+    yaxs     = "i",
+    cex.axis = 1,
+    cex.lab  = 1
+  )
+  # grid.draw(g)
+  grid.arrange(g, main=textGrob(gtitle, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE )
+  dev.off()
+}
+
+
+
+create_heatmap_from_h2h <- function(
+  h2h,
+  roster, # filtered to select players and sorted
+  matrix_type="TOI",
+  game_info,
+  row_ha="H", col_ha="H",
+  our_team_short="NJD",
+  strength="ev5on5",
+  row_num_D=6, col_num_D=6,
+  fig_dir, save_file=FALSE ) {
+
+  file_suffix      <- "toi"
+  title_chart_type <- "TOI"
+  sprintf_format   <- "%.1f"
+  tile.color.low   <- "white"
+  tile.color.high  <- "steelblue"
+  text.size        <- 1.9 # to populate matrix
+  text.x.adj       <- 0.39
+  if( row_ha != col_ha ) {
+    # tile_color.high <- "coral4"
+    # tile_color.high <- muted( "blue" )
+  }
+  if( matrix_type == "Corsi" ) {
+    file_suffix      <- "corsi"
+    title_chart_type <- "Net Shot Attempts"
+    sprintf_format   <- "%s"
+    tile_color.low   <- muted( "red" )
+    # tile_color.high  <- "steelblue"
+    text.x.adj       <- 0.27 # larger value pushes text further right
+  }
+
+  row_team <- col_team <- title_team <- ""
+  if( strength=="ev5on5" ) {
+    title_strength <- "EV5on5"
+  }
+  # ## for single team matrix, add team name to title only.  No row and col labels needed
+  # if( col_ha == row_ha ) {
+  #   title_team <- game_info$home_team
+  #   if( col_ha == "A" ) {
+  #     title_team <- game_info$away_team
+  #   }
+  # } else {
+  #   if( row_ha == "H" ) {
+  #     row_team <- game_info$home_team
+  #   } else {
+  #     row_team <- game_info$away_team
+  #   }
+  #
+  #   if( col_ha == "H" ) {
+  #     col_team <- game_info$home_team
+  #   } else {
+  #     col_team <- game_info$away_team
+  #   }
+  # }
+
+  # 4 F lines, 3 pairs D - usually
+  x.line.separators <- c(seq( 0, 12, 3 ), seq( 14, 18, 2 )) + 0.5 ## F then D
+  y.line.separators <- c(seq( 0,  6, 2 ), seq(  9, 18, 3 )) + 0.5 ## D then F
+  x.FD.separators <- c( 0, 12, 18 ) + 0.5
+  y.FD.separators <- c( 0,  6, 18 ) + 0.5
+
+  # sometimes 7 D though
+  if( row_num_D == 7 ) {
+    y.line.separators <- c(seq( 1,  7, 2 ), 9, seq(  12, 18, 3 )) + 0.5 ## D then F
+    y.FD.separators <- c( 0,  7, 18 ) + 0.5
+  }
+  if( col_num_D == 7 ) {
+    x.line.separators <- c(seq( 0, 9, 3 ), 11, seq( 13, 17, 2 )) + 0.5 ## F then D
+    x.FD.separators <- c( 0, 11, 18 ) + 0.5
+  }
+
+  color.separator <- "red2"
+  base_size <- 5.3
+
+  h2h$value <- h2h$toi_period_all
+
+  value.fill.max    <- max( h2h$value^2 )
+  value.low.cutoff  <- 1
+  fill.low.cutoff   <- 3
+  fill.hi.cutoff    <- 11 # 7 for h2h
+  h2h <- h2h  %>% select( starts_with( "nhl_id"), starts_with( "value") )
+  h2h <- h2h %>% complete( nhl_id_1, nhl_id_2, fill=list(value=0)) ## fill in 0 for missing pairs
+
+  h2h <- h2h %>% mutate(
+    nhl_id_1 = factor( nhl_id_1 ),
+    nhl_id_2 = factor( nhl_id_2 ),
+    # don't even display TOI < 1.0
+    value         = ifelse( abs(value) <= value.low.cutoff, 0, round(value,1) ),
+    value_display = sprintf( sprintf_format, round(value,1) ),
+
+    # above a threshold, fill color should be same
+    value_fill    = pmin( value, fill.hi.cutoff ),
+    value_fill    = ifelse( abs(value_fill) <= fill.low.cutoff, 0, value_fill ), # below cutoff, no fill color
+
+    # exaggerates differences
+    value_sign    = sign(value),
+    value_fill    = value_sign*(value_fill^2),
+
+    value_display   = ifelse( value_display == "0" | value_display == "0.0", "", value_display ), # don't display "0.0"
+    value_display_x = as.numeric(nhl_id_2) + text.x.adj, # fudge factor to get number centered
+    # black on dark colors is hard to read.  make high values (>70% of max value) white.
+    text_color = ifelse( value^2 < 0.7*value.fill.max, "black", "white" )
+  )
+
+
+  p.mat <- ggplot( foo, aes(x=nhl_id_2, y=nhl_id_1)) + geom_tile(aes(fill=value_fill), color="gray95", size=0.2 ) +
+    scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" ) +
+    geom_text( aes(x=value_display_x, label= value_display, colour=text_color), size=text.size, hjust=1 ) +
+    scale_colour_manual(values=c( "black", "white"), guide=FALSE)
+
+  # F/D separators
+  p.mat <- p.mat + geom_vline( xintercept=x.line.separators, size=0.25,  color=color.separator ) +
+    geom_hline( yintercept=y.line.separators, size=0.25, color=color.separator ) +
+    geom_vline( xintercept=x.FD.separators,   size=0.25, color="black"         ) +
+    geom_hline( yintercept=y.FD.separators,   size=0.25, color="black" )
+
+  # axis djustments
+  p.mat <- p.mat + theme_bw(base_size = base_size) + labs(x = col_team, y = row_team) +
+    scale_x_discrete(expand = c(0, 0)) + scale_y_discrete(expand = c(0, 0)) + coord_fixed(ratio=1) +
+    #             labs( title = gtitle ) +   ## title screws up all the spacing...
+    theme(
+      # plot.background = element_rect(colour = "red"),
+      axis.ticks = element_blank(),
+      line = element_line( size=0.2),
+      # axis.ticks.margin = unit(0, "cm"),  deprrecated
+      axis.ticks.length = unit(0.1, "cm"),
+      legend.position = "none",
+      plot.margin = rep(unit(0,"lines"),4),panel.margin = unit(0,"null"),
+      panel.grid.minor = element_line( colour="white" ),
+      axis.title.y = element_text(size = rel(1.2) ),
+      axis.title.x = element_text(size = rel(1.2) ),
+      axis.text.y = element_text( size = base_size ),
+      axis.text.x = element_text( size = base_size,  angle = 90, hjust = 0, vjust = 0.5 )
+    )
+
+
+  # custom rearrangement ----------------------------------------------------
+  ## Move x-axis to top.... sounds simple enough
+  # This next block of code is really messy
+  # mostly because I don't understand grobs so well but also because changes in ggplot2
+  # also mucked the behavior of the previously working version.
+
+  # extract gtable. start with 8 grobs
+  g <- ggplot_gtable(ggplot_build(p.mat))
+
+  # horizontal axis rearrangement - reverse title and axis labels
+  ia <- which(g$layout$name == "axis-b") #5
+  ax <- g$grobs[[ia]]$children[[2]]
+  ax$heights <- rev(ax$heights)
+  ax$grobs   <- rev(ax$grobs)
+  #ax$grobs[[2]]$y <- ax$grobs[[2]]$y - unit(1, "npc") + unit(.25, "cm")
+  ax$grobs[[2]]$y <-  unit(1, "npc") - unit(1, "cm")
+
+  g$heights[[2]] <- g$heights[g$layout[ia,]$t]
+  # grob: top, left, bottom, right
+  # add axis labels grob.  now 9 grobs
+  g <- gtable_add_grob(g, ax, 2, 4, 2, 4)
+
+  ## add new row for upper axis label
+  g <- gtable_add_rows(g, unit(10,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
+  g <- gtable_add_rows(g, g$heights[1], 1)
+  g <- gtable_add_grob(g, g$grobs[[6]], 2, 4, 2, 4) ## add axis label to top
+
+  # drop old axis
+  g$grobs[[ia]]$children[[2]] <- NULL # new 12/21/15
+  # ia <- which(g$layout$name == "xlab")
+  # g$grobs[[ia]]$label = ''
+  #
+  # g$grobs[[ia]]$children[2]$axis$grobs[[2]]$label <- ""
+  # g$grobs[[6]]$children[[2]] <- NULL # new 12/21/15
+  # g$grobs[[6]]$label <- ""
+  g$grobs[[6]] <- nullGrob() # new 21/21/15
+
+  # reduce some margin
+  ia_out <- g$layout[ia,]$t
+
+  # g$grobs[[ia_out]]$label = ''
+  g$heights[[ia_out]] <- unit( 0, "cm" )
+  #
+  g <- gtable_trim( g )
+  g <- gtable_add_rows(g, unit(10,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
+  # g[["widths"]][3] <- list(unit(0.5, "line"))
+
+  # grid.newpage() # draw it
+
+  # Output file -------------------------------------------------------------
+  gtitle <- sprintf( "%s %s-%s: %s %s %s",
+    format( as.Date(game_info$game_date), "%a %m.%d.%y"),
+    game_info$away_team_short, game_info$home_team_short,
+    title_team, title_chart_type, title_strength )
+
+  if( row_team == col_team ) {
+    if( row_ha == "H" ) {
+      plot.file <- paste0( fig_dir, "/", game_info$home_team_short, "-", file.suffix, "-", strength )
+    } else {
+      plot.file <- paste0( fig_dir, "/", game_info$away_team_short, "-", file.suffix, "-", strength )
+    }
+  } else {
+    plot.file <- paste0( fig_dir, "/", game_info$away_team_short,"-", game_info$home_team_short, "-h2h-", file.suffix, "-", strength )
+    if( matrix_type == "Corsi" ) {
+      gtitle <- sprintf ("%s (%s perspective)", gtitle, our_team_short )
+    }
+  }
+  plot.file <- paste0( plot.file, ".png" )
+
+  message( gtitle )
   png( filename = plot.file, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
   par(
     mar      = c(0, 0, 0, 0),

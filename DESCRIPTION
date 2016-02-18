@@ -9,5 +9,5 @@ Description: Commonly used functions for working with NHL data in the NJD
 License: file LICENSE
 LazyData: TRUE
 Depends:
-    nhlutils
+    nhlutils, gtable, gridExtra
 RoxygenNote: 5.0.1
