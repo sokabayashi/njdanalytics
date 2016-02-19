@@ -214,6 +214,127 @@ group_roster_by_lines <- function( roster, toi_matrix, strength="ev5on5" ) {
 }
 
 
+
+#' Group roster by lines from h2h TOI data
+#'
+#' Group forward line & D pairs together within each team's roster
+#'
+#' @param roster Augmented roster with faceoff count and shot added.
+#' @param toi_h2h_ev Data frame from game_h2h filtered for strength and score state
+#'
+#' @return Data frame of roster sorted by lines and D pairs.
+#' @export
+group_roster_by_lines_from_h2h <- function( roster, toi_h2h_ev ) {
+
+  # join individual ev TOI.  missing for G
+  toi_individual <- toi_h2h_ev %>% filter( ha_number_1==ha_number_2 )
+  roster <- roster %>% left_join( toi_individual %>% select( ha_number=ha_number_1, toi_ev5on5=toi_period_all), by="ha_number" )
+  roster$position_fd    <- ifelse( roster$position=="D", "D", ifelse( roster$position=="G", "G", "F") )
+  roster$rank_toi_ev5on5 <- roster$rank_toi_ev5on5_adj <- NA
+
+  toi_h2h_ev <- toi_h2h_ev %>% select( starts_with( "ha_number"), toi=toi_period_all ) %>%
+                  left_join( roster %>% select( ha_number_1=ha_number, team_ha_1=team_ha, position_fd_1=position_fd ), by="ha_number_1" ) %>%
+                  left_join( roster %>% select( ha_number_2=ha_number, team_ha_2=team_ha, position_fd_2=position_fd ), by="ha_number_2" )
+
+  # this is for EV5on5.  But what happens if PK?
+  # want to see units together: 1st unit 2F + 2D, 2nd unit 2F + 2D
+  # Some players play F for some games and D for others...
+  ## Can add a secondary filter by game?  roster variable has game_id4
+  ## Byfuglien
+  # roster$positionFD[ as.numeric(roster$nhl_id) == 8470834 ] <- "F"
+
+  rank <- 1
+  ## for each team. A BEFORE H.  CONSISTENT WITH toi.roster creation.
+  for( HA in c( "A", "H" ) ) {
+    ## for each positionFD
+    for( FD in c("F", "D") ) {
+
+      if( FD == "F" ) {
+        additional_players <- 2
+      } else {
+        additional_players <- 1
+      }
+
+      roster_copy  <- roster  %>% filter( team_ha == HA, position_fd == FD )
+      toi_h2h_copy <- toi_h2h_ev %>% filter( team_ha_1 == HA, team_ha_2 == HA, position_fd_1 == FD, position_fd_2 == FD )
+      n_players_remaining <- nrow( roster_copy )
+      while( n_players_remaining > 0 ) {
+        these_players <- data_frame()
+
+        ## Sort remaining players by *individual* TOI, Hi -> Lo
+        roster_copy <- roster_copy %>% arrange( desc(toi_ev5on5) )
+
+        ## Assign top player the best rank remaining (best = 1)
+        top_ha_number <- roster_copy$ha_number[1]
+        roster$rank_toi_ev5on5[ roster$ha_number == top_ha_number ] <- rank
+        these_players <- bind_rows(
+          these_players,
+          data_frame( ha_number = top_ha_number, rank = rank )
+        )
+        rank <- rank + 1
+
+        ## Remove this guy from roster copy, which we'll use to find top linemate
+        roster_copy <- roster_copy[-1,]
+        n_players_remaining <- n_players_remaining - 1
+
+        ## Calc *shared* TOI with this player and re-sort remaining players by this shared TOI
+        shared_toi <-toi_h2h_copy %>% filter( ha_number_1 == top_ha_number,
+                                              ha_number_2 %in% roster_copy$ha_number ) %>% arrange( desc(toi))
+
+        these_players <- bind_rows(
+          these_players,
+          data_frame( ha_number = shared_toi$ha_number_2[1:additional_players],
+                      rank      = seq(from=rank,length=additional_players) )
+        )
+        rank <- rank + additional_players
+
+        ## Remove from roster copy
+        roster_copy <- roster_copy %>% anti_join( these_players, by="ha_number" )
+        n_players_remaining <- nrow( roster_copy )
+
+        apply( these_players, 1, function(x)
+          roster$rank_toi_ev5on5[ roster$ha_number==x["ha_number"] ] <<- x[ "rank"]
+        )
+
+
+        # Tweak order within lines.
+        # for F, put C first.  can tell by faceoff count.
+        these_players <- these_players %>%
+          left_join( roster %>% select( ha_number, rank_toi_ev5on5, faceoff_cnt, shoots, position_gc ), by="ha_number" )
+        if( FD=="F" ) {
+          # took some faceoffs.  C, then L then R.
+          if( these_players$faceoff_cnt %>% sum(na.rm=T) > 0 ) {
+            these_players_sorted <- these_players %>% filter( faceoff_cnt==max(faceoff_cnt, na.rm=T) )
+            these_players_sorted <- bind_rows(
+              these_players_sorted,
+              these_players %>% anti_join( these_players_sorted, by="ha_number") %>%
+                arrange( shoots, position_gc, rank_toi_ev5on5 )
+            )
+          } else {
+            # no faceoffs.  just sort by TOI.
+            these_players_sorted <- these_players %>% arrange( rank_toi_ev5on5 )
+          }
+
+        } else {
+          # For D, go L then R.
+          these_players_sorted <- these_players %>% arrange( shoots )
+        }
+        # based on this new ordering, write down the adj rank
+        these_players_sorted$rank_toi_ev5on5_adj <- sort( as.numeric(these_players_sorted$rank_toi_ev5on5 ) )
+        # write these new adj ranks to roster
+        apply( these_players_sorted, 1, function(x)
+          roster$rank_toi_ev5on5_adj[ roster$ha_number==x[["ha_number"]] ] <<- x[["rank_toi_ev5on5_adj"]]
+        )
+
+      } # while
+    } # for
+  } # for
+
+  roster$rank_toi_ev5on5_adj <- as.numeric( roster$rank_toi_ev5on5_adj )
+  return( roster %>% arrange( rank_toi_ev5on5_adj ) )
+}
+
+
 #' Augment roster data frame
 #'
 #' Add faceoff count and shot (L/R) to roster
@@ -236,6 +357,10 @@ augment_roster <- function( roster, pbp_df, player ) {
                         left_join( centers_df, by="ha_number" ) %>%
                         left_join( player %>% select( nhl_id, shoots ), by="nhl_id" ) %>%
                         mutate( num_last_name=paste( number, last_name ) )
+
+  # check if num_last_name is unique.  if not, insert first initial
+  # 15 SMITH is on both OTT and NSH
+
   roster_augmented
 }
 

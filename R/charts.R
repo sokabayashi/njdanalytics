@@ -252,27 +252,38 @@ create_player_heatmap <- function(
 
 create_heatmap_from_h2h <- function(
   h2h,
-  roster, # filtered to select players and sorted
-  matrix_type="TOI",
-  game_info,
+  roster, # filtered to select skaters and SORTED
+  value_type="TOI",
+  # game_info,
   row_ha="H", col_ha="H",
   our_team_short="NJD",
   strength="ev5on5",
   row_num_D=6, col_num_D=6,
   fig_dir, save_file=FALSE ) {
 
+  h2h <- h2h %>% select( starts_with( "nhl_id" ), toi=toi_period_all )
+  h2h <- h2h %>% left_join( roster %>%
+      select( nhl_id_1=nhl_id, num_last_name_1=num_last_name, rank_toi_1=rank_toi_ev5on5_adj ), by="nhl_id_1") %>%
+    left_join( roster %>%
+      select( nhl_id_2=nhl_id, num_last_name_2=num_last_name, rank_toi_2=rank_toi_ev5on5_adj ), by="nhl_id_2")
+
+  num_last_names <- roster %>% filter( position != "G" ) %>% select( num_last_name ) %>% unlist(use.names = F)
+
+  h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels=num_last_names )
+  h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=rev(num_last_names ) ) # rev order for y axis
+
   file_suffix      <- "toi"
   title_chart_type <- "TOI"
   sprintf_format   <- "%.1f"
   tile.color.low   <- "white"
   tile.color.high  <- "steelblue"
-  text.size        <- 1.9 # to populate matrix
+  text.size        <- 1.7 # to populate matrix
   text.x.adj       <- 0.39
   if( row_ha != col_ha ) {
     # tile_color.high <- "coral4"
     # tile_color.high <- muted( "blue" )
   }
-  if( matrix_type == "Corsi" ) {
+  if( value_type == "Corsi" ) {
     file_suffix      <- "corsi"
     title_chart_type <- "Net Shot Attempts"
     sprintf_format   <- "%s"
@@ -324,18 +335,14 @@ create_heatmap_from_h2h <- function(
   color.separator <- "red2"
   base_size <- 5.3
 
-  h2h$value <- h2h$toi_period_all
+  h2h$value <- h2h$toi
 
-  value.fill.max    <- max( h2h$value^2 )
   value.low.cutoff  <- 1
   fill.low.cutoff   <- 3
   fill.hi.cutoff    <- 11 # 7 for h2h
-  h2h <- h2h  %>% select( starts_with( "nhl_id"), starts_with( "value") )
-  h2h <- h2h %>% complete( nhl_id_1, nhl_id_2, fill=list(value=0)) ## fill in 0 for missing pairs
 
-  h2h <- h2h %>% mutate(
-    nhl_id_1 = factor( nhl_id_1 ),
-    nhl_id_2 = factor( nhl_id_2 ),
+  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0)) ## fill in 0 for missing pairs
+  h2h_fill <- h2h_fill %>% mutate(
     # don't even display TOI < 1.0
     value         = ifelse( abs(value) <= value.low.cutoff, 0, round(value,1) ),
     value_display = sprintf( sprintf_format, round(value,1) ),
@@ -349,19 +356,21 @@ create_heatmap_from_h2h <- function(
     value_fill    = value_sign*(value_fill^2),
 
     value_display   = ifelse( value_display == "0" | value_display == "0.0", "", value_display ), # don't display "0.0"
-    value_display_x = as.numeric(nhl_id_2) + text.x.adj, # fudge factor to get number centered
+    value_display_x = as.numeric(num_last_name_1) + text.x.adj, # fudge factor to get number centered
     # black on dark colors is hard to read.  make high values (>70% of max value) white.
-    text_color = ifelse( value^2 < 0.7*value.fill.max, "black", "white" )
+    text_color = ifelse( abs(value_fill) > 0.7*max(abs(value_fill) ), "white", "black")
   )
 
 
-  p.mat <- ggplot( foo, aes(x=nhl_id_2, y=nhl_id_1)) + geom_tile(aes(fill=value_fill), color="gray95", size=0.2 ) +
+  p.mat <- ggplot( h2h_fill, aes(x=num_last_name_1, y=num_last_name_2)) + geom_tile(aes(fill=value_fill), color="gray95", size=0.2 ) +
     scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" ) +
     geom_text( aes(x=value_display_x, label= value_display, colour=text_color), size=text.size, hjust=1 ) +
     scale_colour_manual(values=c( "black", "white"), guide=FALSE)
 
   # F/D separators
-  p.mat <- p.mat + geom_vline( xintercept=x.line.separators, size=0.25,  color=color.separator ) +
+  # color.separator = "white"
+  p.mat <- p.mat +
+    geom_vline( xintercept=x.line.separators, size=0.25, color=color.separator ) +
     geom_hline( yintercept=y.line.separators, size=0.25, color=color.separator ) +
     geom_vline( xintercept=x.FD.separators,   size=0.25, color="black"         ) +
     geom_hline( yintercept=y.FD.separators,   size=0.25, color="black" )
@@ -436,27 +445,31 @@ create_heatmap_from_h2h <- function(
   # grid.newpage() # draw it
 
   # Output file -------------------------------------------------------------
-  gtitle <- sprintf( "%s %s-%s: %s %s %s",
-    format( as.Date(game_info$game_date), "%a %m.%d.%y"),
-    game_info$away_team_short, game_info$home_team_short,
-    title_team, title_chart_type, title_strength )
+  # gtitle <- sprintf( "%s %s-%s: %s %s %s",
+  #   format( as.Date(game_info$game_date), "%a %m.%d.%y"),
+  #   game_info$away_team_short, game_info$home_team_short,
+  #   title_team, title_chart_type, title_strength )
 
-  if( row_team == col_team ) {
-    if( row_ha == "H" ) {
-      plot.file <- paste0( fig_dir, "/", game_info$home_team_short, "-", file.suffix, "-", strength )
-    } else {
-      plot.file <- paste0( fig_dir, "/", game_info$away_team_short, "-", file.suffix, "-", strength )
-    }
-  } else {
-    plot.file <- paste0( fig_dir, "/", game_info$away_team_short,"-", game_info$home_team_short, "-h2h-", file.suffix, "-", strength )
-    if( matrix_type == "Corsi" ) {
-      gtitle <- sprintf ("%s (%s perspective)", gtitle, our_team_short )
-    }
-  }
-  plot.file <- paste0( plot.file, ".png" )
-
-  message( gtitle )
-  png( filename = plot.file, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
+  # if( row_team == col_team ) {
+  #   if( row_ha == "H" ) {
+  #     plot.file <- paste0( fig_dir, "/", game_info$home_team_short, "-", file.suffix, "-", strength )
+  #   } else {
+  #     plot.file <- paste0( fig_dir, "/", game_info$away_team_short, "-", file.suffix, "-", strength )
+  #   }
+  # } else {
+  #   plot.file <- paste0( fig_dir, "/", game_info$away_team_short,"-", game_info$home_team_short, "-h2h-", file.suffix, "-", strength )
+  #   if( value_type == "Corsi" ) {
+  #     gtitle <- sprintf ("%s (%s perspective)", gtitle, our_team_short )
+  #   }
+  # }
+  # plot.file <- paste0( plot.file, ".png" )
+  #
+  # message( gtitle )
+  grid.newpage()
+  grid.draw(g)
+  gtitle <-"test"
+  plot_filename <- "sandbox/tmp.png"
+  png( filename = plot_filename, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
   par(
     mar      = c(0, 0, 0, 0),
     xaxs     = "i",

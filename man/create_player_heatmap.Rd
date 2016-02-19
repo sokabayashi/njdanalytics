@@ -2,21 +2,21 @@
 % Please edit documentation in R/charts.R
 \name{create_player_heatmap}
 \alias{create_player_heatmap}
-\title{Create player heatmap.}
+\title{Create player heatmap for TOI or shot diff.  Can be same team or h2h.  Game level or across games.}
 \usage{
-create_player_heatmap(game_info, my_matrix, row_ha = "H", col_ha = "H",
+create_player_heatmap(my_matrix, game_info, row_ha = "H", col_ha = "H",
   our_team_short = "NJD", matrix_type = "TOI", strength = "ev5on5",
   filter_period = "all", row_num_D = 6, col_num_D = 6,
-  minutes_played = 60, fig_dir)
+  minutes_played = 60, fig_dir, save_file = FALSE)
 }
 \arguments{
-\item{game_info}{from stage_game}
-
 \item{my_matrix}{Symmetric matrix populated with TOI or shot differential}
+
+\item{game_info}{from stage_game.  If NULL, then data is not from a single game}
 
 \item{row_ha}{"H" or "A" of row team}
 
-\item{col_ha}{"H" or "A" of row team}
+\item{col_ha}{"H" or "A" of col team}
 
 \item{our_team_short}{"NJD" by default}
 
@@ -28,16 +28,18 @@ create_player_heatmap(game_info, my_matrix, row_ha = "H", col_ha = "H",
 
 \item{row_num_D}{6 by default.  But sometimes it is 7}
 
-\item{col_num_D}{5 by default.  But sometimes it is 7}
+\item{col_num_D}{6 by default.  But sometimes it is 7}
 
 \item{minutes_played}{Number of minutes played for chart title}
 
 \item{fig_dir}{Directory where to save file}
+
+\item{save_file}{FALSE by default}
 }
 \value{
-None.  ggplot chart created.
+ggplot chart
 }
 \description{
-Create player heatmap.
+Create player heatmap for TOI or shot diff.  Can be same team or h2h.  Game level or across games.
 }
 
