@@ -6,3 +6,5 @@
 *.csv
 *.html
 *.pdf
+*tmp*
+*_cache*
