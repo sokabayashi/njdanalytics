@@ -1,0 +1,94 @@
+---
+title: "Heatmap by Game"
+geometry: margin=1cm
+output: html_document
+fontsize: 10pt
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec = ",")
+```
+
+```{r more_setup, include=F}
+library( njdanalytics )
+# source( paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/charts.R" ) )
+
+nhl_db <- setup_nhl_db()
+# player_tbl           <- tbl( nhl_db, "player"               ) %>% collect()
+# stage_game           <- tbl( nhl_db, "stage_game"           )
+# stage_roster         <- tbl( nhl_db, "stage_roster"         )
+# stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay"     )
+# stage_shift_interval <- tbl( nhl_db, "stage_shift_interval" )
+team_score           <- tbl( nhl_db, "team_score"           )
+# game_player          <- tbl( nhl_db, "game_player"          )
+
+# njd_games has game_number and game_id4 to join different data sources
+this_season     <- "20152016"
+this_session_id <- "2"
+njd_games            <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short=="NJD" ) %>%
+  collect() %>% arrange( game_date )
+njd_games            <- add_team_score_label( njd_games, our_team="NJD" ) %>%
+  select( game_number, season, session_id, game_id4, ha, opp_team_short, game_label )
+njd_game_id4s        <- njd_games$game_id4
+
+game_infos <- tbl( nhl_db, "stage_game" ) 
+
+```
+
+```{r data sets}
+load( file=paste0( nhl_dir$shot, "/njd_through_55.RData" ) )
+# njd_summary_spreadsheet <- paste0( nhl_dir$shot, "/NJD_through_gm50.xlsx" )
+# njd_summary <- read_excel( njd_summary_spreadsheet, skip=1)
+
+njd_team <- njd_players_by_game %>% filter( last_name =="NJD" ) %>% 
+  select( -season, -session_id, -ha_number, -team_short, -game_id4, -position_fd, -number, -last_name, -nhl_id, 
+    -cf, -ca, -c_net, -ff, -fa, -f_net, -scf_i ) %>% as_data_frame()
+njd_team[ is.na( njd_team) ] <- 0
+
+njd_team_chances_ev <- njd_team %>% filter( strength=="ev5on5", metric %in% c( "green", "blue", "goal" ))
+goals_ev            <- njd_team %>% filter( strength=="ev5on5", metric=="goal" ) %>% 
+  select( game_number, gf=scf, ga=sca, g_net=sc_net )
+
+njd_team_chances_ev <- njd_team_chances_ev %>% left_join( goals_ev, by=c("game_number" ) )
+```
+
+```{r}
+this_season <- "20152016"
+this_game_id4 <- "0836"
+
+roster      <- tbl( nhl_db, "stage_roster"         ) %>% filter( season==this_season, game_id4==this_game_id4 ) %>% collect()
+pbp_df      <- tbl( nhl_db, "stage_playbyplay"     ) %>% filter( season==this_season, game_id4==this_game_id4 ) %>% collect()
+shared_toi  <- tbl( nhl_db, "stage_shift_interval" ) %>% filter( season==this_season, game_id4==this_game_id4 ) %>% collect()
+toi_h2h_ev  <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, game_id4==this_game_id4,
+  filter_score_diff=="all", filter_strength=="ev5on5") %>% collect()
+player_info <- tbl( nhl_db, "player" ) %>% filter( nhl_id %in% roster$nhl_id ) %>% collect()
+
+roster <- augment_roster( roster, pbp_df, player_info ) # append faceoff count and L/R shot
+shared_toi_ev  <- shared_toi %>% filter( num_skaters_h==5, num_skaters_a==5, num_goalies_h==1, num_goalies_a==1 )
+
+# toi_matrix_ev  <- get_toi_matrix_from_h2h( toi_h2h_ev ) 
+
+# sort roster by lines, pairings.
+roster_sorted  <- group_roster_by_lines_from_h2h( roster, toi_h2h_ev )
+toi_h2h_ev <- toi_h2h_ev %>% left_join( roster_sorted %>% select( ha_number_1=ha_number))
+
+# Let's try H only
+roster_H  <- roster_sorted %>% filter( team_ha=="H" )
+toi_h2h_H <- toi_h2h_ev %>% filter( nhl_id_1 %in% roster_H$nhl_id, nhl_id_2 %in% roster_H$nhl_id )
+
+create_heatmap_from_h2h( toi_h2h_H, roster_H, value_type="TOI" )
+
+```
+
+
+
+```{r}
+g.chances <- ggplot( njd_team_chances_ev, aes(x=game_number, y=scf_pct) )
+g.chances + geom_bar( stat="identity", aes(fill=metric), position="dodge") + stat_smooth(aes(fill=metric, color=metric),se=F)
+
+```
+
+
+
+
