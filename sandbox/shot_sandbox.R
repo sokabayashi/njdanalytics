@@ -406,8 +406,8 @@ njd_player_chances_df <- do.call("rbind", njd_player_chances )
 
 njd_players_by_game   <- njd_player_chances_df %>% filter( team_short=="NJD" ) %>%
                           left_join( player_tbl %>% select( nhl_id, position_fd, number ), by="nhl_id" )
-save( njd_players_by_game, file=paste0( nhl_dir$shot, "/njd_through_55.RData" ))
-
+save( njd_player_chances_df, njd_players_by_game, file=paste0( nhl_dir$shot, "/njd_through_58.RData" ))
+load( file=paste0( nhl_dir$shot, "/njd_through_58.RData" ))
 
 
 
@@ -574,7 +574,7 @@ games_vs_opp <- njd_games %>% filter( opp_team_short==opponent )
 this_game_number <- games_vs_opp$game_number
 
 # or perhaps we know the exact game number
-this_game_number <- 56
+this_game_number <- c( 54)
 player_chances_vs_opp <- njd_player_chances_df %>% filter( game_number %in% games_vs_opp$game_number )
 
 # or perhaps we want season to date NJD only
@@ -596,7 +596,7 @@ shift_interval_df <- stage_shift_interval %>% filter( game_id4==this_game_id4 )
 this_game_player  <- game_player %>%          filter( game_id4==this_game_id4 )
 
 # append faceoff count and L/R shot
-roster_skaters <- augment_roster( this_roster, pbp_df, player_tbl )
+roster_skaters <- augment_roster( this_roster, pbp_df, player_tbl ) %>% filter( position != "G" )
 shared_toi_ev  <- shift_interval_df %>% filter( num_skaters_h==5, num_skaters_a==5, num_goalies_h==1, num_goalies_a==1 )
 toi_matrix_ev  <- get_toi_matrix( this_roster, shared_toi_ev ) # need to pass *original* roster
 
@@ -643,8 +643,8 @@ game_info            <- supplement_game_info( game_info, our_team="NJD" )
    ggtitle( "EV5on5 Chances")
 
  ggplot(foo_other, aes(x=period,y=count)) +
-   geom_bar(data=foo_other %>% filter( event_team=="NJD"), stat = "identity", aes(fill=shotcolor)) +
-   geom_bar(data=foo_other %>% filter(event_team!="NJD"), aes(y=-count),  fill="firebrick2", stat = "identity") +
+   geom_bar(data=foo_other %>% filter( event_team=="NJD"), stat = "identity", aes(fill=shotcolor), width=0.9) +
+   geom_bar(data=foo_other %>% filter(event_team!="NJD"), aes(y=-count),  fill="firebrick2", stat = "identity", width=0.9) +
    geom_text(data=foo_other %>% filter( event_team=="NJD"),aes(label=count), vjust=-0.1,size=3)+
    geom_text(data=foo_other %>% filter( event_team!="NJD"),aes(y=-count,label=count), vjust=-0.5,size=3)+
    geom_hline(yintercept = 0) +
@@ -653,6 +653,10 @@ game_info            <- supplement_game_info( game_info, our_team="NJD" )
    scale_y_continuous("Chances", breaks=seq(-20,20,2) ) +
    facet_grid( shotcolor ~., scales="free_y", switch="both" ) + theme_bw( ) + theme( legend.position="none") +
    ggtitle( "Non-EV5on5 Chances")
+
+
+
+
 
 player_chances_vs_opp_ev  <- player_chances_vs_opp %>% filter( strength=="ev5on5" )
 player_chances_vs_opp_all <- player_chances_vs_opp %>% filter( strength=="all" )
@@ -762,7 +766,9 @@ names(player_stats_brief) <- brief_col_names
 
 # write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/NJD_through_gm50.csv") )
 
-write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/gm56_PHI.csv") )
+write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/gm54_NYR.csv") )
+
+player_green_pp %>% filter( last_name=="NJD" )
 
 player_chances_vs_opp_ev %>% filter( metric=="corsi", last_name=="NJD" )
 player_chances_vs_opp_ev %>% filter( metric=="fenwick", last_name=="NJD" )
@@ -813,7 +819,24 @@ brief_col_names <- c( "Team", "Player", "Number", "Pos", "Games", "TOI/Gm", "TOI
 njd_stats_summary <- njd_stats_summary %>% filter( position_fd != "G" ) %>% arrange( team_short, desc(position_fd), desc(toi_gm) )
 names(njd_stats_summary) <- brief_col_names
 
-write_csv( njd_stats_summary %>% filter( Team=="NJD" ), path=paste0(nhl_dir$shot, "/NJD_through_gm50.csv") )
+write_csv( njd_stats_summary %>% filter( Team=="NJD" ), path=paste0(nhl_dir$shot, "/NJD_through_gm58.csv") )
+
+### Compare 28 vs 39
+severson_games <- njd_player_chances_df  %>% filter( last_name=="SEVERSON", metric=="corsi", strength=="all") %>% select( game_number ) %>% unlist()
+severson_last_10_games <- severson_games %>% sort() %>% tail(10)
+
+helgeson_games <- njd_player_chances_df  %>% filter( last_name=="HELGESON", metric=="corsi", strength=="all") %>% select( game_number ) %>% unlist()
+helgeson_last_10_games <- helgeson_games %>% sort() %>% tail(10)
+
+combined_last_10_games <- c( severson_last_10_games, helgeson_last_10_games ) %>% unique()
+length( combined_last_10_games ) # 13 games.  so 7 overlap.
+
+player_chances_vs_opp <- njd_player_chances_df %>% filter( game_number %in% combined_last_10_games )
+write_csv( njd_stats_summary %>% filter( Team=="NJD" ), path=paste0(nhl_dir$shot, "/njd_28_vs_39.csv") )
+
+combined_game_id4s <- player_chances_vs_opp %>% select(game_id4 ) %>% distinct() %>% unlist()
+
+combind_gp <- game_player %>% filter( game_id4 %in% combined_game_id4s, filter_strength=="ev5on5", filter_score_diff=="all" )
+my_gp <- combind_gp %>% group_by( last_name ) %>% summarize( gm=n(), toi_total=sum(toi), toi_gm=toi_total/gm)
 
 
-save( )
