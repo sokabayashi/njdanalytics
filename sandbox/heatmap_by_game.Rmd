@@ -14,8 +14,10 @@ knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec 
 library( njdanalytics )
 # source( paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/charts.R" ) )
 
+# source( file="../sandbox/plots_multiple_left_align.R" )
+
 nhl_db <- setup_nhl_db()
-# player_tbl           <- tbl( nhl_db, "player"               ) %>% collect()
+player_tbl           <- tbl( nhl_db, "player"               ) %>% collect()
 # stage_game           <- tbl( nhl_db, "stage_game"           )
 # stage_roster         <- tbl( nhl_db, "stage_roster"         )
 # stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay"     )
@@ -64,7 +66,6 @@ pbp_df      <- tbl( nhl_db, "stage_playbyplay"     ) %>% filter( season==this_se
 shared_toi  <- tbl( nhl_db, "stage_shift_interval" ) %>% filter( season==this_season, game_id4==this_game_id4 ) %>% collect()
 
 # custom db pulls
-player_tbl <- tbl( nhl_db, "player" ) %>% filter( nhl_id %in% roster$nhl_id ) %>% collect()
 toi_h2h_ev  <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, game_id4==this_game_id4,
                                                      filter_score_diff=="all", filter_strength=="ev5on5") %>% collect()
 
@@ -99,10 +100,11 @@ g.chances + geom_bar( stat="identity", aes(fill=metric), position="dodge") + sta
 ```
 
 ```{r linemates}
-this_player_name <- "Jacob Josefson"
+this_player_name <- "Adam Henrique"
 this_season <- "20152016"
 
 this_player <- player_tbl %>% filter( first_last_name==this_player_name ) 
+this_player_num_last_name <- paste( this_player$number, this_player$last_name )
 this_team_short <- this_player$team_short
 this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%  collect() %>% arrange( game_date ) %>% select( game_number, season, session_id, game_id4, ha, opp_team_short )
 
@@ -119,35 +121,37 @@ linemates <- linemates %>% select( game_date, game_id4, toi=toi_period_all, nhl_
                   mutate( num_last_name_2=paste( number_2, last_name_2 ))
 
 linemates_total <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_name_2 ) %>% summarise( toi=sum(toi) ) %>% ungroup() %>% arrange( desc(toi) )
-  
+
 top_5_linemates <- linemates %>% filter( row_number() <=6 ) %>% 
-                      mutate( toi_pct=toi/max(toi) ) %>% filter( nhl_id_2 != this_player_id, toi_pct > 0.20 ) %>% 
+                      mutate( toi_pct=toi/max(toi) ) %>% filter( toi_pct > 0.20 ) %>% 
                      select( game_id4, num_last_name_2, toi, toi_pct )
 linemates_num_last_name <- top_5_linemates$num_last_name_2 %>% unique()
 
 linemates_total <- linemates_total %>% filter( num_last_name_2 %in% linemates_num_last_name )
 linemates_num_last_name <- linemates_total$num_last_name_2
 
-
 this_player_games <- this_team_games %>% left_join( top_5_linemates, by="game_id4" )
 this_player_games$num_last_name_2 <- factor(this_player_games$num_last_name_2, level=rev(linemates_num_last_name ) )
 
 this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2, fill=list(toi_pct=0) ) %>% 
                             filter( !is.na(num_last_name_2))
+this_player_toi_games <- this_player_games_fill  %>% filter( num_last_name_2 == this_player_num_last_name )
+this_player_games_fill <- this_player_games_fill %>% filter( num_last_name_2 != this_player_num_last_name )
+
 ```
 
 ```{r linemates chart}
 base_size=7
 season_str <- paste0( substr(this_season,1,4), "-", substr(this_season,5,8) )
 p.linemates <- ggplot( this_player_games_fill, aes(game_number, num_last_name_2))
-p.linemates + 
+p.linemates  <- p.linemates + 
   geom_tile(aes(fill=toi_pct),color="grey50", size=0.1) +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
   # scale_x_continuous( limits=c(1,60), breaks=seq(0,100,10) ) + 
   scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
   scale_x_continuous("Game Number", breaks=seq(0,100,1), expand = c(0, 0)) + 
   scale_y_discrete( "Linemate", expand = c(0, 0)) +
-  labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
+  # labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
     theme(
       # plot.background = element_rect(colour = "white"),
       axis.ticks = element_blank(),
@@ -162,9 +166,35 @@ p.linemates +
       axis.text.y = element_text( size = base_size ),
       axis.text.x = element_text( size = base_size )
     ) 
+
+```
+
+```{r linemates chart}
+p.this_player_toi <- ggplot( this_player_toi_games, aes(x=game_number,y=toi) )
+p.this_player_toi <- p.this_player_toi + geom_bar(stat="identity",fill="darkred" ) +
+    scale_x_continuous(breaks=seq(0,100,1), expand = c(0, 0))
+p.this_player_toi
+```
+
+```{r combine plots}
+theme_top    <- theme(legend.position="none", plot.margin=unit(c( 0.5,1,-0.3,1), "cm"),
+                      axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
+theme_middle <- theme(legend.position="none", plot.margin=unit(c(-0.3,1,-0.3,1), "cm"),
+  axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
+
+theme_bottom <- theme(legend.position="none", plot.margin=unit(c(-0.5,1,1,1), "cm"))
+
+p.this_player_toi <- p.this_player_toi + theme_bw() + theme_middle
+p.this_player_toi_top <- p.this_player_toi + theme_bw() + theme_top
+# p.linemates <- p.linemates + theme_bottom
+
 ```
 
 
 
+```{r chart em}
+foo <- rbind_plots( list(p.this_player_toi_top, p.this_player_toi, p.linemates), c(1.5,1.5,8))
 
-
+grid.newpage()
+grid.draw(foo)
+```
