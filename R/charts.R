@@ -251,15 +251,16 @@ create_player_heatmap <- function(
 
 
 create_heatmap_from_h2h <- function(
-  h2h,
+  h2h,    # ha_number_1 is rows, ha_number_2 is cols
   roster, # filtered to select skaters and SORTED
   value_type="TOI",
+
   # game_info,
   row_ha="H", col_ha="H",
-  our_team_short="NJD",
-  strength="ev5on5",
   row_num_D=6, col_num_D=6,
-  fig_dir, save_file=FALSE ) {
+  strength="ev5on5",
+  fig_dir="fig/", save_file=FALSE
+  ) {
 
   h2h <- h2h %>% select( starts_with( "nhl_id" ), toi=toi_period_all )
   h2h <- h2h %>% left_join( roster %>%
@@ -267,25 +268,24 @@ create_heatmap_from_h2h <- function(
     left_join( roster %>%
       select( nhl_id_2=nhl_id, num_last_name_2=num_last_name, rank_toi_2=rank_toi_ev5on5_adj ), by="nhl_id_2")
 
-  num_last_names <- roster %>% filter( position != "G" ) %>% select( num_last_name ) %>% unlist(use.names = F)
+  num_last_names_1 <- roster %>% filter( position != "G" ) %>% select( num_last_name ) %>% unlist(use.names = F)
+  num_last_names_2 <- roster %>% filter( position != "G" ) %>% select( num_last_name ) %>% unlist(use.names = F)
 
-  h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels=num_last_names )
-  h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=rev(num_last_names ) ) # rev order for y axis
+  h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(num_last_names_1 )) # rev order for y axis
+  h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=    (num_last_names_2 ))
 
   file_suffix      <- "toi"
   title_chart_type <- "TOI"
   sprintf_format   <- "%.1f"
   tile.color.low   <- "white"
   tile.color.high  <- "steelblue"
-  text.size        <- 1.7 # to populate matrix
-  text.x.adj       <- 0.39
-  if( row_ha != col_ha ) {
-    # tile_color.high <- "coral4"
-    # tile_color.high <- muted( "blue" )
-  }
+  text.size        <- 1.7  ## to populate matrix
+  if( value_type=="")
+  text.x.adj       <- 0.39 # nudge values in cell
+
   if( value_type == "Corsi" ) {
     file_suffix      <- "corsi"
-    title_chart_type <- "Net Shot Attempts"
+    title_chart_type <- "Net Corsi"
     sprintf_format   <- "%s"
     tile_color.low   <- muted( "red" )
     # tile_color.high  <- "steelblue"
@@ -335,12 +335,12 @@ create_heatmap_from_h2h <- function(
   color.separator <- "red2"
   base_size <- 5.3
 
-  h2h$value <- h2h$toi
 
   value.low.cutoff  <- 1
   fill.low.cutoff   <- 3
   fill.hi.cutoff    <- 11 # 7 for h2h
 
+  h2h$value <- h2h$toi
   h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0)) ## fill in 0 for missing pairs
   h2h_fill <- h2h_fill %>% mutate(
     # don't even display TOI < 1.0
@@ -356,13 +356,13 @@ create_heatmap_from_h2h <- function(
     value_fill    = value_sign*(value_fill^2),
 
     value_display   = ifelse( value_display == "0" | value_display == "0.0", "", value_display ), # don't display "0.0"
-    value_display_x = as.numeric(num_last_name_1) + text.x.adj, # fudge factor to get number centered
+    value_display_x = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
     # black on dark colors is hard to read.  make high values (>70% of max value) white.
     text_color = ifelse( abs(value_fill) > 0.7*max(abs(value_fill) ), "white", "black")
   )
 
 
-  p.mat <- ggplot( h2h_fill, aes(x=num_last_name_1, y=num_last_name_2)) + geom_tile(aes(fill=value_fill), color="gray95", size=0.2 ) +
+  p.mat <- ggplot( h2h_fill, aes(x=num_last_name_2, y=num_last_name_1)) + geom_tile(aes(fill=value_fill), color="gray95", size=0.2 ) +
     scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" ) +
     geom_text( aes(x=value_display_x, label= value_display, colour=text_color), size=text.size, hjust=1 ) +
     scale_colour_manual(values=c( "black", "white"), guide=FALSE)
@@ -660,3 +660,70 @@ create_shotcolor_line_chart <- function( shots_df, goals_df, mandown_intervals_d
 
   p.shots
 }
+
+
+
+
+#' rbind_max
+#'
+#' Called by rbind_plots but might be useful elsewhere.
+#'
+#' @param ...
+#'
+#' @return ggplotGrob
+#' @export
+#'
+rbind_max <- function(...){
+  gtl <- lapply(list(...), ggplotGrob)
+
+  bind2 <- function (x, y)
+  {
+    stopifnot(ncol(x) == ncol(y))
+    if (nrow(x) == 0)
+      return(y)
+    if (nrow(y) == 0)
+      return(x)
+    y$layout$t <- y$layout$t + nrow(x)
+    y$layout$b <- y$layout$b + nrow(x)
+    x$layout   <- rbind(x$layout, y$layout)
+    x$heights  <- gtable:::insert.unit(x$heights, y$heights)
+    x$rownames <- c(x$rownames, y$rownames)
+    x$widths   <- grid::unit.pmax(x$widths, y$widths)
+    x$grobs    <- append(x$grobs, y$grobs)
+    x
+  }
+
+  Reduce(bind2, gtl)
+}
+
+
+#' rbind ggplot charts
+#'
+#' Bind mutliple ggplot charts vertically, aligning x axis.
+#' Works best if x-axis is the same for all charts.
+#'
+#' @param plot_list List of ggplot charts, top to bottom
+#' @param plot_heights Vector of plot heights, top to bottom
+#'
+#' @return ggplotGrob
+#' @export
+#'
+rbind_plots <- function(
+  plot_list, plot_heights
+) {
+  if( length(plot_list) != length(plot_heights) ) {
+    stop( "Length of plot heights does not equal number of plots." )
+  }
+
+  gp <- do.call(rbind_max, plot_list )
+  # gp <- gtable_add_cols(gp, widths = sum(leg$widths))
+  panels <- gp$layout$t[grep("panel", gp$layout$name)]
+  # set the relative panel heights
+  gp$heights[panels] <- lapply(plot_heights, unit, "null")
+  # set the legend justification to top (it's a gtable embedded in a gtable)
+  # leg[["grobs"]][[1]][["vp"]] <- viewport(just = c(0.5,1))
+  # gp <- gtable_add_grob(gp, leg, t = 1, l = ncol(gp))
+
+  gp
+}
+
