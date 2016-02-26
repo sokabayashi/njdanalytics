@@ -1,0 +1,121 @@
+---
+title: "Heatmap by Game"
+geometry: margin=1cm
+output: html_document
+fontsize: 10pt
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec = ",")
+```
+
+```{r more_setup, include=F}
+library( njdanalytics )
+
+nhl_db <- setup_nhl_db()
+player_tbl           <- tbl( nhl_db, "player"           ) %>% collect()
+team_score           <- tbl( nhl_db, "team_score"       )
+stage_game           <- tbl( nhl_db, "stage_game"       )
+stage_roster         <- tbl( nhl_db, "stage_roster"     )
+stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay" )
+
+this_season     <- "20152016"
+this_session_id <- "2"
+
+# njd_games has game_number and game_id4 to join different data sources
+our_team_short <- "NJD" # might change perspective for games we're not in?
+our_games            <- team_score %>% 
+                          filter( season==this_season, session_id==this_session_id, team_short==our_team_short) %>%
+                          collect() %>% arrange( game_date )
+our_games            <- add_team_score_label( our_games, our_team=our_team_short ) %>%
+                          select( game_date, game_number, season, session_id, game_id4, ha, opp_team_short, game_label )
+our_game_id4s        <- our_games$game_id4
+```
+
+
+```{r vs opp}
+this_opp_team_short <- "CAR"
+vs_opp_games     <- our_games %>% filter( opp_team_short==this_opp_team_short )
+vs_opp_game_id4s <- vs_opp_games$game_id4
+# drop first game against CAR. W 5-1 but a weird game
+vs_opp_game_id4s <- vs_opp_game_id4s[-1]
+
+toi_h2h_ev           <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, game_id4 %in% vs_opp_game_id4s,
+                                                     filter_score_diff=="all", filter_strength=="ev5on5") %>% collect()
+vs_opp_rosters      <- stage_roster %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% vs_opp_game_id4s ) %>% collect()
+vs_opp_pbp          <- stage_playbyplay %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% vs_opp_game_id4s ) %>% collect()
+```
+
+
+
+```{r augment data}
+# add faceoff count, is_center, num_last_name
+vs_opp_rosters_C      <- augment_rosters_C( vs_opp_rosters, vs_opp_pbp, player_tbl )
+
+# Sort rosters of teams, ORDERED F/D/G, with F in groups of 4 lines (C first), D in 3 pairings (L then R shot).
+# Highest TOI/gm C is first of F, highest TOI/gm D is first pairing.
+# Excess F and D are appended on to F and D groups respectively.
+vs_opp_rosters_group  <- group_multigame_rosters_by_lines( vs_opp_rosters_C, toi_h2h_ev )
+
+# Aggregate TOI by p1 vs p2
+toi_h2h <- aggregate_toi_h2h( toi_h2h_ev, vs_opp_rosters_group )
+```
+
+```{r our F}
+# rows = _1, cols = _2
+toi_h2h_our_F      <- toi_h2h %>% filter( team_short_1==our_team_short, team_short_2==our_team_short,
+                                          position_fd_1=="F", position_fd_2=="F" )
+
+row_num_last_names <- col_num_last_names <- vs_opp_rosters_group %>% filter( team_short==our_team_short, position_fd=="F" ) %>% 
+                                            select( num_last_name ) %>% unlist(use.names = F)
+
+create_heatmap_from_h2h( toi_h2h_our_F, value_type="toi", row_num_last_names, col_num_last_names,
+                          row_axis_title = "NJD Forwards", col_axis_title = "New Jersey", chart_title = "NJD Forwards vs. CAR 2",
+                          chart_filename="sandbox/tmp2.png" )
+
+
+```
+
+
+```{r full h2h}
+# nhl_id_1 = our players, nhl_id_2 = their players
+toi_h2h_vs         <- toi_h2h %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short )
+row_num_last_names <- vs_opp_rosters_group %>% filter( team_short==our_team_short, position_fd != "G" ) %>% 
+                                            select( num_last_name ) %>% unlist(use.names = F)
+col_num_last_names <- vs_opp_rosters_group %>% filter( team_short==this_opp_team_short, position_fd != "G" ) %>% 
+                                            select( num_last_name ) %>% unlist(use.names = F)
+
+create_heatmap_from_h2h( toi_h2h_vs, value_type="toi", row_num_last_names, col_num_last_names,
+                          row_axis_title = "NJD", col_axis_title = "CAR", chart_title = "NJD vs. CAR",
+                          chart_filename="sandbox/njd-car.png" )
+```
+
+
+```{r centers}
+# nhl_id_1 = our players, nhl_id_2 = their players
+toi_h2h_C <- toi_h2h %>% filter( is_center_1, is_center_2, team_short_1==our_team_short, team_short_2==this_opp_team_short )
+
+row_num_last_names <- vs_opp_rosters_group %>% filter( team_short==our_team_short, is_center ) %>% 
+                                            select( num_last_name ) %>% unlist(use.names = F)
+col_num_last_names <- vs_opp_rosters_group %>% filter( team_short==this_opp_team_short, is_center ) %>% 
+                                            select( num_last_name ) %>% unlist(use.names = F)
+
+create_heatmap_from_h2h( toi_h2h_C, value_type="toi", row_num_last_names, col_num_last_names,
+                          row_axis_title = "NJD", col_axis_title = "CAR", chart_title = "NJD vs. CAR Centers",
+                          chart_filename="sandbox/njd-car centers.png" )
+```
+
+```{r our D vs C}
+# nhl_id_1 = our players, nhl_id_2 = their players
+toi_h2h_D_vs_C <- toi_h2h %>% filter( position_fd_1=="D", is_center_2, team_short_1==our_team_short, team_short_2==this_opp_team_short )
+gp <- create_heatmap_from_h2h( toi_h2h_D_vs_C, value_type="TOI" )
+
+grid.newpage()
+grid.draw(gp)
+
+```
+
+

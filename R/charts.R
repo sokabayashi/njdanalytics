@@ -250,40 +250,47 @@ create_player_heatmap <- function(
 
 
 
-#' Create heatmap ggplot object from h2h data
+#' Create heatmap gtable object from h2h data
 #'
 #' @param h2h Data frame of num_last_name_1, num_last_name_2 pairs with value
-#' @param value_type "TOI" or other
+#' @param value_type "toi" or other. The variable name in h2h containing values to plot
 #' @param row_num_last_names Sorted vector of num_last_name. All will appear even if not in h2h
 #' @param col_num_last_names Sorted vector of num_last_name  All will appear even if not in h2h
 #' @param row_axis_title String
 #' @param col_axis_title String
 #' @param chart_title String
+#' @param chart_filename String
 #'
 #' @return ggplot object
 #' @export
 #'
-create_heatmap_ggplot_from_h2h <- function(
+create_heatmap_from_h2h <- function(
   h2h,                # num_last_name_1 is rows, num_last_name_2 is cols
-  value_type="TOI",
+  value_type = "toi", # variable name in h2h containing values to plot
   row_num_last_names,
   col_num_last_names,
-  row_axis_title="",
-  col_axis_title="",
-  chart_title=""
+  row_axis_title = "",
+  col_axis_title = "",
+  chart_title    = "",
+  chart_filename = "tmp.png"
 ) {
 
   h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(row_num_last_names ) ) # rev order for y axis
   h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=    (col_num_last_names ) )
 
   base_size <- 5.3
-  tile.color.high  <- "steelblue"
+  tile.color.high  <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
   text.size        <- 1.7  ## to populate matrix
+  if( length(row_num_last_names) <= 5 ) {
+    text.size <- 3
+    base_size <- 6
+  } else if( length(row_num_last_names) > 18 ) {
+    text.size <- 1.5
+  }
   value.low.cutoff <- 1  # don't even display value at all below this value
   fill.low.cutoff  <- 3  # don't fill color at all below this value
-  fill.hi.cutoff   <- 11 # 75% of max value.  above this level, all colors are same.
 
-  if( value_type=="TOI" ) {
+  if( value_type=="toi" ) {
     tile.color.low   <- "white"        # positive values only.  white for 0.
     sprintf_format   <- "%.1f"         # 1 decimal place
     text.x.adj       <- 0.39           # nudge values in cell to right
@@ -294,8 +301,9 @@ create_heatmap_ggplot_from_h2h <- function(
     text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
   }
 
-  h2h$value <- h2h$toi
-  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) )
+  h2h$value <- h2h[[ value_type ]]
+  fill.hi.cutoff   <- quantile(h2h$value, 0.8) # 80th percentile?  above this level, all colors are same.
+  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
     value         = ifelse( abs(value) <= value.low.cutoff, 0, round(value, 1) ), # don't even display TOI < 1.0
@@ -307,9 +315,7 @@ create_heatmap_ggplot_from_h2h <- function(
     # value fill controls the color of the each cell
     value_fill    = pmin( value, fill.hi.cutoff ),
     value_fill    = ifelse( abs(value_fill) <= fill.low.cutoff, 0, value_fill ), # below cutoff, no fill color
-    # exaggerates differences of colors
-    value_sign    = sign(value),
-    value_fill    = value_sign*(value_fill^2),
+    value_fill    = sign(value)*(value_fill^2),   # exaggerates differences of colors
 
     # text location on heatmap
     x_value_display = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
@@ -325,14 +331,12 @@ create_heatmap_ggplot_from_h2h <- function(
 
   # axis djustments
   p.mat <- p.mat +
-    labs( x = col_axis_title, y = row_axis_title, title=chart_title ) +
+    labs( x = col_axis_title, y = row_axis_title ) +
     scale_x_discrete(expand = c(0, 0)) + scale_y_discrete(expand = c(0, 0)) + coord_fixed(ratio=1) +
     theme_bw( base_size = base_size ) +
     theme(
-      # plot.background = element_rect(colour = "red"),
       axis.ticks = element_blank(),
       line = element_line( size=0.2),
-      # axis.ticks.margin = unit(0, "cm"),  deprecated
       axis.ticks.length = unit(0.1, "cm"),
       legend.position = "none",
       plot.margin = rep(unit(0,"lines"),4),panel.margin = unit(0,"null"),
@@ -343,7 +347,11 @@ create_heatmap_ggplot_from_h2h <- function(
       axis.text.x  = element_text( size = base_size,  angle = 90, hjust = 0, vjust = 0.5 )
     )
 
-  p.mat
+  # xaxis correction
+  g <- move_heatmap_xaxis_to_top( p.mat )
+
+  message( "Save heatmap to ", chart_filename  )
+  save_heatmap_png(g, chart_title, filename=chart_filename, base_size )
 }
 
 
@@ -405,10 +413,12 @@ move_heatmap_xaxis_to_top <- function( p.mat ) {
   g
 }
 
-save_heatmap_png <- function( g, gtitle, filename, base_size) {
+save_heatmap_png <- function( g, gtitle, filename="tmp.png", base_size=5) {
 
-  plot_filename <- "sandbox/tmp.png"
-  png( filename = plot_filename, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
+  if( !str_detect(filename, ".png" ) ) {
+    filename = paste0( filename, ".png" )
+  }
+  png( filename = filename, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
   par(
     mar      = c(0, 0, 0, 0),
     xaxs     = "i",
