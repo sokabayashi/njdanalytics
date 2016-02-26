@@ -250,153 +250,111 @@ create_player_heatmap <- function(
 
 
 
-create_heatmap_from_h2h <- function(
-  h2h,    # ha_number_1 is rows, ha_number_2 is cols
-  roster, # filtered to select skaters and SORTED
+#' Create heatmap ggplot object from h2h data
+#'
+#' @param h2h Data frame of num_last_name_1, num_last_name_2 pairs with value
+#' @param value_type "TOI" or other
+#' @param row_num_last_names Sorted vector of num_last_name. All will appear even if not in h2h
+#' @param col_num_last_names Sorted vector of num_last_name  All will appear even if not in h2h
+#' @param row_axis_title String
+#' @param col_axis_title String
+#' @param chart_title String
+#'
+#' @return ggplot object
+#' @export
+#'
+create_heatmap_ggplot_from_h2h <- function(
+  h2h,                # num_last_name_1 is rows, num_last_name_2 is cols
   value_type="TOI",
+  row_num_last_names,
+  col_num_last_names,
+  row_axis_title="",
+  col_axis_title="",
+  chart_title=""
+) {
 
-  # game_info,
-  row_ha="H", col_ha="H",
-  row_num_D=6, col_num_D=6,
-  strength="ev5on5",
-  fig_dir="fig/", save_file=FALSE
-  ) {
+  h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(row_num_last_names ) ) # rev order for y axis
+  h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=    (col_num_last_names ) )
 
-  h2h <- h2h %>% select( starts_with( "nhl_id" ), toi=toi_period_all )
-  h2h <- h2h %>% left_join( roster %>%
-      select( nhl_id_1=nhl_id, num_last_name_1=num_last_name, rank_toi_1=rank_toi_ev5on5_adj ), by="nhl_id_1") %>%
-    left_join( roster %>%
-      select( nhl_id_2=nhl_id, num_last_name_2=num_last_name, rank_toi_2=rank_toi_ev5on5_adj ), by="nhl_id_2")
-
-  num_last_names_1 <- roster %>% filter( position != "G" ) %>% select( num_last_name ) %>% unlist(use.names = F)
-  num_last_names_2 <- roster %>% filter( position != "G" ) %>% select( num_last_name ) %>% unlist(use.names = F)
-
-  h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(num_last_names_1 )) # rev order for y axis
-  h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=    (num_last_names_2 ))
-
-  file_suffix      <- "toi"
-  title_chart_type <- "TOI"
-  sprintf_format   <- "%.1f"
-  tile.color.low   <- "white"
+  base_size <- 5.3
   tile.color.high  <- "steelblue"
   text.size        <- 1.7  ## to populate matrix
-  if( value_type=="")
-  text.x.adj       <- 0.39 # nudge values in cell
+  value.low.cutoff <- 1  # don't even display value at all below this value
+  fill.low.cutoff  <- 3  # don't fill color at all below this value
+  fill.hi.cutoff   <- 11 # 75% of max value.  above this level, all colors are same.
 
-  if( value_type == "Corsi" ) {
-    file_suffix      <- "corsi"
-    title_chart_type <- "Net Corsi"
-    sprintf_format   <- "%s"
-    tile_color.low   <- muted( "red" )
-    # tile_color.high  <- "steelblue"
-    text.x.adj       <- 0.27 # larger value pushes text further right
+  if( value_type=="TOI" ) {
+    tile.color.low   <- "white"        # positive values only.  white for 0.
+    sprintf_format   <- "%.1f"         # 1 decimal place
+    text.x.adj       <- 0.39           # nudge values in cell to right
+  } else {
+    # Corsi, chances
+    tile_color.low   <- muted( "red" ) # red negative values
+    sprintf_format   <- "%s"           # no decimal place
+    text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
   }
-
-  row_team <- col_team <- title_team <- ""
-  if( strength=="ev5on5" ) {
-    title_strength <- "EV5on5"
-  }
-  # ## for single team matrix, add team name to title only.  No row and col labels needed
-  # if( col_ha == row_ha ) {
-  #   title_team <- game_info$home_team
-  #   if( col_ha == "A" ) {
-  #     title_team <- game_info$away_team
-  #   }
-  # } else {
-  #   if( row_ha == "H" ) {
-  #     row_team <- game_info$home_team
-  #   } else {
-  #     row_team <- game_info$away_team
-  #   }
-  #
-  #   if( col_ha == "H" ) {
-  #     col_team <- game_info$home_team
-  #   } else {
-  #     col_team <- game_info$away_team
-  #   }
-  # }
-
-  # 4 F lines, 3 pairs D - usually
-  x.line.separators <- c(seq( 0, 12, 3 ), seq( 14, 18, 2 )) + 0.5 ## F then D
-  y.line.separators <- c(seq( 0,  6, 2 ), seq(  9, 18, 3 )) + 0.5 ## D then F
-  x.FD.separators <- c( 0, 12, 18 ) + 0.5
-  y.FD.separators <- c( 0,  6, 18 ) + 0.5
-
-  # sometimes 7 D though
-  if( row_num_D == 7 ) {
-    y.line.separators <- c(seq( 1,  7, 2 ), 9, seq(  12, 18, 3 )) + 0.5 ## D then F
-    y.FD.separators <- c( 0,  7, 18 ) + 0.5
-  }
-  if( col_num_D == 7 ) {
-    x.line.separators <- c(seq( 0, 9, 3 ), 11, seq( 13, 17, 2 )) + 0.5 ## F then D
-    x.FD.separators <- c( 0, 11, 18 ) + 0.5
-  }
-
-  color.separator <- "red2"
-  base_size <- 5.3
-
-
-  value.low.cutoff  <- 1
-  fill.low.cutoff   <- 3
-  fill.hi.cutoff    <- 11 # 7 for h2h
 
   h2h$value <- h2h$toi
-  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0)) ## fill in 0 for missing pairs
-  h2h_fill <- h2h_fill %>% mutate(
-    # don't even display TOI < 1.0
-    value         = ifelse( abs(value) <= value.low.cutoff, 0, round(value,1) ),
-    value_display = sprintf( sprintf_format, round(value,1) ),
+  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) )
 
-    # above a threshold, fill color should be same
+  h2h_fill <- h2h_fill %>% mutate(
+    value         = ifelse( abs(value) <= value.low.cutoff, 0, round(value, 1) ), # don't even display TOI < 1.0
+
+    # value_display is text that populates cell.  Don't display "0.0"
+    value_display = sprintf( sprintf_format, value ),
+    value_display = ifelse( value_display == "0" | value_display == "0.0", "", value_display ),
+
+    # value fill controls the color of the each cell
     value_fill    = pmin( value, fill.hi.cutoff ),
     value_fill    = ifelse( abs(value_fill) <= fill.low.cutoff, 0, value_fill ), # below cutoff, no fill color
-
-    # exaggerates differences
+    # exaggerates differences of colors
     value_sign    = sign(value),
     value_fill    = value_sign*(value_fill^2),
 
-    value_display   = ifelse( value_display == "0" | value_display == "0.0", "", value_display ), # don't display "0.0"
-    value_display_x = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
-    # black on dark colors is hard to read.  make high values (>70% of max value) white.
+    # text location on heatmap
+    x_value_display = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
+    # black text on saturated colors is hard to read.  make high values (>70% of max value) white.
     text_color = ifelse( abs(value_fill) > 0.7*max(abs(value_fill) ), "white", "black")
   )
 
-
-  p.mat <- ggplot( h2h_fill, aes(x=num_last_name_2, y=num_last_name_1)) + geom_tile(aes(fill=value_fill), color="gray95", size=0.2 ) +
+  p.mat <- ggplot( h2h_fill, aes(x=num_last_name_2, y=num_last_name_1) ) +
+    geom_tile( aes( fill=value_fill ), color="gray95", size=0.2 ) +
     scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" ) +
-    geom_text( aes(x=value_display_x, label= value_display, colour=text_color), size=text.size, hjust=1 ) +
-    scale_colour_manual(values=c( "black", "white"), guide=FALSE)
-
-  # F/D separators
-  # color.separator = "white"
-  p.mat <- p.mat +
-    geom_vline( xintercept=x.line.separators, size=0.25, color=color.separator ) +
-    geom_hline( yintercept=y.line.separators, size=0.25, color=color.separator ) +
-    geom_vline( xintercept=x.FD.separators,   size=0.25, color="black"         ) +
-    geom_hline( yintercept=y.FD.separators,   size=0.25, color="black" )
+    geom_text( aes( x=x_value_display, label=value_display, colour=text_color ), size=text.size, hjust=1 ) +
+    scale_colour_manual( values=c( "black", "white"), guide=FALSE )
 
   # axis djustments
-  p.mat <- p.mat + theme_bw(base_size = base_size) + labs(x = col_team, y = row_team) +
+  p.mat <- p.mat +
+    labs( x = col_axis_title, y = row_axis_title, title=chart_title ) +
     scale_x_discrete(expand = c(0, 0)) + scale_y_discrete(expand = c(0, 0)) + coord_fixed(ratio=1) +
-    #             labs( title = gtitle ) +   ## title screws up all the spacing...
+    theme_bw( base_size = base_size ) +
     theme(
       # plot.background = element_rect(colour = "red"),
       axis.ticks = element_blank(),
       line = element_line( size=0.2),
-      # axis.ticks.margin = unit(0, "cm"),  deprrecated
+      # axis.ticks.margin = unit(0, "cm"),  deprecated
       axis.ticks.length = unit(0.1, "cm"),
       legend.position = "none",
       plot.margin = rep(unit(0,"lines"),4),panel.margin = unit(0,"null"),
       panel.grid.minor = element_line( colour="white" ),
       axis.title.y = element_text(size = rel(1.2) ),
       axis.title.x = element_text(size = rel(1.2) ),
-      axis.text.y = element_text( size = base_size ),
-      axis.text.x = element_text( size = base_size,  angle = 90, hjust = 0, vjust = 0.5 )
+      axis.text.y  = element_text( size = base_size ),
+      axis.text.x  = element_text( size = base_size,  angle = 90, hjust = 0, vjust = 0.5 )
     )
 
+  p.mat
+}
 
-  # custom rearrangement ----------------------------------------------------
-  ## Move x-axis to top.... sounds simple enough
+
+#' Move heatmap x-axis title and text to top of chart
+#'
+#' @param p.mat heatmap ggplot
+#'
+#' @return ggplot_gtable
+#' @export
+#'
+move_heatmap_xaxis_to_top <- function( p.mat ) {
   # This next block of code is really messy
   # mostly because I don't understand grobs so well but also because changes in ggplot2
   # also mucked the behavior of the previously working version.
@@ -442,32 +400,13 @@ create_heatmap_from_h2h <- function(
   g <- gtable_add_rows(g, unit(10,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
   # g[["widths"]][3] <- list(unit(0.5, "line"))
 
-  # grid.newpage() # draw it
+    # grid.newpage()
+  # grid.draw(g)
+  g
+}
 
-  # Output file -------------------------------------------------------------
-  # gtitle <- sprintf( "%s %s-%s: %s %s %s",
-  #   format( as.Date(game_info$game_date), "%a %m.%d.%y"),
-  #   game_info$away_team_short, game_info$home_team_short,
-  #   title_team, title_chart_type, title_strength )
+save_heatmap_png <- function( g, gtitle, filename, base_size) {
 
-  # if( row_team == col_team ) {
-  #   if( row_ha == "H" ) {
-  #     plot.file <- paste0( fig_dir, "/", game_info$home_team_short, "-", file.suffix, "-", strength )
-  #   } else {
-  #     plot.file <- paste0( fig_dir, "/", game_info$away_team_short, "-", file.suffix, "-", strength )
-  #   }
-  # } else {
-  #   plot.file <- paste0( fig_dir, "/", game_info$away_team_short,"-", game_info$home_team_short, "-h2h-", file.suffix, "-", strength )
-  #   if( value_type == "Corsi" ) {
-  #     gtitle <- sprintf ("%s (%s perspective)", gtitle, our_team_short )
-  #   }
-  # }
-  # plot.file <- paste0( plot.file, ".png" )
-  #
-  # message( gtitle )
-  grid.newpage()
-  grid.draw(g)
-  gtitle <-"test"
   plot_filename <- "sandbox/tmp.png"
   png( filename = plot_filename, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
   par(
@@ -481,6 +420,10 @@ create_heatmap_from_h2h <- function(
   grid.arrange(g, main=textGrob(gtitle, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE )
   dev.off()
 }
+
+
+
+
 
 
 
@@ -686,6 +629,7 @@ rbind_max <- function(...){
     y$layout$t <- y$layout$t + nrow(x)
     y$layout$b <- y$layout$b + nrow(x)
     x$layout   <- rbind(x$layout, y$layout)
+
     x$heights  <- gtable:::insert.unit(x$heights, y$heights)
     x$rownames <- c(x$rownames, y$rownames)
     x$widths   <- grid::unit.pmax(x$widths, y$widths)

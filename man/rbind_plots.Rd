@@ -12,7 +12,7 @@ rbind_plots(plot_list, plot_heights)
 \item{plot_heights}{Vector of plot heights, top to bottom}
 }
 \value{
-nothing
+ggplotGrob
 }
 \description{
 Bind mutliple ggplot charts vertically, aligning x axis.

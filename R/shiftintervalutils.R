@@ -335,6 +335,206 @@ group_roster_by_lines_from_h2h <- function( roster, toi_h2h_ev ) {
 }
 
 
+
+
+
+
+#' Group rosters by lines from h2h TOI data
+#'
+#' Group forward line & D pairs together within each team's roster.
+#' Across games, this can get messy so we need to establish some rules:
+#'  1. every player on a team appears exactly once
+#'  2. 4 forward lines of 3 F, 3 pairs of D
+#'  3. excess F and D are appended on in descending order of TOI all strength
+#'
+#' @param roster Augmented roster C via augment_rosters_C(). Faceoff count and shot added
+#' @param toi_h2h_ev Data frame from game_h2h filtered for strength and score state
+#'
+#' @return Data frame of roster sorted by lines and D pairs.
+#' @export
+group_multigame_rosters_by_lines <- function( rosters_C, toi_h2h_ev ) {
+  toi_h2h <-aggregate_toi_h2h( toi_h2h_ev, rosters_C )
+  toi_h2h_T <- toi_h2h %>% filter( team_comp=="T", nhl_id_1 != nhl_id_2 )  # need consider teammates only
+
+  rosters_C$rank <- NA
+  teams <- rosters_C$team_short %>% unique()
+
+  rank <- 1 # running incremental rank through all teams.  when done, rank = nrow(rosters_C)
+  for( this_team_short in teams ) {
+    # Forwards first ----------------------------------------------------------
+    additional_players <- 2
+    C_only  <- rosters_C %>% filter( team_short == this_team_short, position_fd == "F",  is_center ) %>% arrange( desc(toi) ) # sort by TOI/gm
+    non_C   <- rosters_C %>% filter( team_short == this_team_short, position_fd == "F", !is_center )
+    n_C     <- nrow( C_only )
+    n_non_C <- nrow( non_C  )
+
+    toi_h2h_copy <- toi_h2h_T %>% filter(
+      team_short_1 == this_team_short, team_short_2 == this_team_short,
+      position_fd_1 == "F", position_fd_2 == "F", !nhl_id_2 %in% C_only$nhl_id  # we're looking for linemates of C
+    )
+    while( n_C > 0 ) {
+      this_line <- data_frame()
+      top_C_id <- C_only$nhl_id[1]
+
+      # write top_C rank to rosters_C
+      rosters_C$rank[ rosters_C$nhl_id == top_C_id ] <- rank
+      this_line <- data_frame( nhl_id = top_C_id, rank = rank )
+      rank <- rank + 1
+
+      ## Remove this guy from roster copy
+      C_only <- C_only %>% filter( nhl_id != top_C_id )
+      n_C    <- nrow( C_only )
+
+      ## Calc *shared* TOI with this player and re-sort remaining players by this shared TOI
+      shared_toi <- toi_h2h_copy %>% filter( nhl_id_1 == top_C_id, !nhl_id_2 %in% C_only$nhl_id ) %>%
+                    arrange( desc(toi))
+
+      this_line <- bind_rows(
+        this_line,
+        data_frame( nhl_id = shared_toi$nhl_id_2[1:additional_players],
+                    rank   = seq( from=rank, length=additional_players ) )
+      )
+      rank <- rank + additional_players
+
+      ## Remove linemates from non_C and toi_h2h_copy
+      non_C   <- non_C %>% anti_join( this_line, by="nhl_id" )
+      n_non_C <- nrow( non_C )
+      toi_h2h_copy <- toi_h2h_copy %>% filter( !nhl_id_2 %in% this_line$nhl_id )
+
+      # Tweak order within lines.  C first, then L then R.
+      this_line <- this_line %>% left_join( rosters_C %>% select( nhl_id, faceoff_cnt, shoots, position, toi ), by="nhl_id" )
+
+      this_line_sorted <- bind_rows(
+          this_line %>% slice(1),
+          this_line %>% slice(-1) %>% arrange( shoots, position, desc(toi ) )
+        )
+
+      # overwrite rank with  this new sort
+      this_line_sorted$rank <- sort( as.numeric(this_line_sorted$rank ) )
+
+      # write these new adj ranks to roster
+      apply( this_line_sorted, 1, function(x)
+        rosters_C$rank[ rosters_C$nhl_id==x["nhl_id"] ] <<- x["rank"]
+      )
+    } # while n_C > 0
+
+    # no more C remaining.  appending remaining F
+    if( n_non_C ) {
+      this_line_sorted <- non_C %>% arrange( desc(toi) )
+      this_line_sorted$rank <- seq( from=rank, length=n_non_C )
+      rank <- rank + n_non_C
+
+      apply( this_line_sorted, 1, function(x)
+        rosters_C$rank[ rosters_C$nhl_id==x["nhl_id"] ] <<- x["rank"]
+      )
+    }
+
+# Defensemen --------------------------------------------------------------
+
+    additional_players <- 1
+    D_only   <- rosters_C %>% filter( team_short == this_team_short, position_fd == "D" ) %>% arrange(desc(toi))
+    n_D      <- nrow( D_only  )
+    toi_h2h_copy <- toi_h2h_T %>% filter(
+      team_short_1 == this_team_short, team_short_2 == this_team_short,
+      position_fd_1 == "D", position_fd_2 == "D"
+    )
+    n_D_pairs <- 3
+    while( n_D_pairs > 0 ) {
+      this_line <- data_frame()
+      top_D_id <- D_only$nhl_id[1]
+
+      # write top_C rank to rosters_C
+      rosters_C$rank[ rosters_C$nhl_id == top_D_id ] <- rank
+      this_line <- data_frame( nhl_id = top_D_id, rank = rank )
+      rank <- rank + 1
+
+      ## Remove this guy from roster copy
+      D_only <- D_only %>% filter( nhl_id != top_D_id )
+      n_D    <- nrow( D_only )
+
+      ## Calc *shared* TOI with this player and re-sort remaining players by this shared TOI
+      shared_toi <- toi_h2h_copy %>% filter( nhl_id_1 == top_D_id, nhl_id_2 != top_D_id ) %>% arrange( desc(toi))
+
+      this_line <- bind_rows(
+        this_line,
+        data_frame( nhl_id = shared_toi$nhl_id_2[1:additional_players],
+          rank   = seq( from=rank, length=additional_players ) )
+      )
+      rank <- rank + additional_players
+
+      ## Remove linemates from non_C and toi_h2h_copy
+      D_only   <- D_only %>% anti_join( this_line, by="nhl_id" )
+      n_D      <- nrow( D_only )
+      toi_h2h_copy <- toi_h2h_copy %>% filter( !nhl_id_2 %in% this_line$nhl_id )
+
+      # Tweak order within lines.  C first, then L then R.
+      this_line <- this_line %>% left_join( rosters_C %>% select( nhl_id, faceoff_cnt, shoots, position, toi ), by="nhl_id" )
+      this_line_sorted <- this_line %>% arrange( shoots, desc(toi ) )
+
+      # overwrite rank with  this new sort
+      this_line_sorted$rank <- sort( as.numeric(this_line_sorted$rank ) )
+
+      # write these new adj ranks to roster
+      apply( this_line_sorted, 1, function(x)
+        rosters_C$rank[ rosters_C$nhl_id==x["nhl_id"] ] <<- x["rank"]
+      )
+      n_D_pairs <- n_D_pairs-1
+    } # while n_D_pairs > 0
+
+    # no more D remaining.  appending remaining D
+    if( n_D ) {
+      this_line_sorted      <- D_only %>% arrange( desc(toi) )
+      this_line_sorted$rank <- seq( from=rank, length=n_D )
+      rank <- rank + n_D
+
+      apply( this_line_sorted, 1, function(x)
+        rosters_C$rank[ rosters_C$nhl_id==x["nhl_id"] ] <<- x["rank"]
+      )
+    }
+
+    # Goalies
+    this_line_sorted      <-  rosters_C %>% filter( team_short == this_team_short, position_fd == "G" ) %>% arrange(desc(gm))
+    n_G <- nrow( this_line_sorted )
+    this_line_sorted$rank <- seq( from=rank, length=n_G )
+    rank <- rank + n_G
+
+    apply( this_line_sorted, 1, function(x)
+      rosters_C$rank[ rosters_C$nhl_id==x["nhl_id"] ] <<- x["rank"]
+    )
+
+  } # for
+
+  rosters_C$rank <- as.numeric( rosters_C$rank )
+  return( rosters_C %>% arrange( rank ) )
+}
+
+
+
+#' Aggregate toi_h2h
+#'
+#' @param toi_h2h_ev Ev5on5 toi_h2h data across multiple games
+#' @param rosters_C Roster augmented with C info
+#'
+#' @return toi_h2h A summarized toi_h2h
+#' @export
+#'
+aggregate_toi_h2h <- function( toi_h2h_ev, rosters_C ) {
+
+  toi_h2h <- toi_h2h_ev %>% group_by( nhl_id_1, nhl_id_2, team_comp ) %>%
+                  summarise( toi=sum(toi_period_all) ) %>% ungroup()
+
+  rosters_1 <- rosters_2 <- rosters_C
+  names( rosters_1 ) <- paste0( names(rosters_1), "_1" )
+  names( rosters_2 ) <- paste0( names(rosters_2), "_2" )
+
+  toi_h2h <- toi_h2h %>%
+              left_join( rosters_1, by="nhl_id_1" ) %>%
+              left_join( rosters_2, by="nhl_id_2" )
+              # arrange( team_short_1, position_fd_1, desc(toi_1), team_short_2, position_fd_2, desc(toi_2) )
+  toi_h2h
+}
+
+
 #' Augment roster data frame
 #'
 #' Add faceoff count and shot (L/R) to roster
@@ -363,6 +563,47 @@ augment_roster <- function( roster, pbp_df, player ) {
 
   roster_augmented
 }
+
+
+#' Augment roster with faceoff count, center designation, num_last_name
+#'
+#' @param roster Data frame as from stage_game for arbitrary number of games
+#' @param pbp_df Data frame of play by play
+#' @param player_tbl Plyaer table
+#' @param center_faceoff_rank_cutoff Cutoff for number of C per team
+#'
+#' @return Data frame of rosters with additional columns: faceoff count, is_center, num_last_name, L/R
+#' @export
+#'
+augment_rosters_C <- function( roster, pbp_df, player_tbl, center_faceoff_rank_cutoff=4 ) {
+  # Figure out our centers. Make C the first row on a forward line.
+  faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 )
+  # faceoff_cnt_df  <- data_frame( ha_number=c( faceoffs_ev5on5$event_player1, faceoffs_ev5on5$event_player2 ))
+  faceoff_cnt_df  <- data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p1_id ))
+  centers_df      <- faceoff_cnt_df %>% group_by( nhl_id ) %>% summarize( faceoff_cnt=n() )
+
+  # CAREFUL.  player can get traded and play against former team
+  roster_augmented <- roster %>% group_by( team_short, nhl_id ) %>%
+                          summarize( gm=n(), toi=mean(toi_total) ) %>% ungroup()
+  roster_augmented <- roster_augmented %>%
+    left_join( player_tbl %>% select( nhl_id, number, last_name, shoots, position, position_fd ), by="nhl_id" ) %>%
+    left_join( centers_df, by="nhl_id" ) %>%
+    mutate( num_last_name=paste( number, str_to_upper(last_name) ) )
+
+  roster_augmented[ is.na(roster_augmented) ] <- 0
+  # TO DO: check if num_last_name is unique.  if not, insert first initial
+  # 15 SMITH is on both OTT and NSH
+
+  # Top 4 faceoff count on each team is C
+  roster_augmented <- roster_augmented %>% group_by( team_short ) %>% arrange( desc(faceoff_cnt ) ) %>%
+          mutate( is_center=row_number() <= center_faceoff_rank_cutoff )
+
+  roster_augmented$position_fd <- factor( roster_augmented$position_fd, levels=c("F", "D", "G") )
+  retval <- roster_augmented %>% group_by( team_short, position_fd ) %>% arrange( desc(toi), position_fd )
+
+  retval %>% ungroup()
+}
+
 
 #' Get EV5on5 TOI Matrix
 #'
