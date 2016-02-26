@@ -302,7 +302,7 @@ create_heatmap_from_h2h <- function(
   }
 
   h2h$value <- h2h[[ value_type ]]
-  fill.hi.cutoff   <- quantile(h2h$value, 0.8) # 80th percentile?  above this level, all colors are same.
+  fill.hi.cutoff   <- quantile( h2h$value, 0.8 ) # 80th percentile?  above this level, all colors are same.
   h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
