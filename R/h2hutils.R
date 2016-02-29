@@ -30,10 +30,10 @@ get_linemates_by_game <- function(
                                     select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
                                     arrange( game_date ) %>% collect()
 
-  linemates   <- game_h2h %>% filter( season==this_season, session_id==this_session_id,
-                                      filter_score_diff=="all", filter_strength=="ev5on5",
-                                      nhl_id_1==this_player_id, team_comp=="T") %>%
-                              group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
+  linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id,
+                                    filter_score_diff=="all", filter_strength=="ev5on5",
+                                    nhl_id_1==this_player_id, team_comp=="T" ) %>%
+                            group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
   linemates <- linemates %>% left_join( player_tbl %>%
                                         select( nhl_id_2=nhl_id, number_2=number, last_name_2=last_name, position_fd_2=position_fd ),
                                         by="nhl_id_2" ) %>%
