@@ -104,6 +104,11 @@ this_player_name <- "Colin Wilson"
 this_player_name <- "Alexander Burmistrov"
 this_season <- "20152016"
 
+# Tables needed:
+# player_tbl
+# game_h2h
+# team_score
+
 this_player <- player_tbl %>% filter( first_last_name==this_player_name ) 
 this_player_num_last_name <- paste( this_player$number, this_player$last_name )
 this_team_short <- this_player$team_short
@@ -135,45 +140,53 @@ linemates_season <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_nam
                             num_last_name_2_label = paste0( num_last_name_2, "\n", "(", toi_pct_total, "%)" )
                         ) %>% arrange( desc(toi) )
 linemates_season <- linemates_season %>% filter( num_last_name_2 %in% linemates_num_last_name )
+this_player_num_last_name_label <- linemates_season$num_last_name_2_label[1]
 
 # put it all together by game.
 this_player_games <- this_team_games %>% left_join( top_linemates, by="game_id4" ) %>% 
-                                         left_join( linemates_season %>% select( num_last_name_2, num_last_name_2_label ), by="num_last_name_2" )
+                                         left_join( linemates_season %>% 
+                                                    select( num_last_name_2, num_last_name_2_label ), by="num_last_name_2" )
 this_player_games$num_last_name_2_label <- factor(this_player_games$num_last_name_2_label, level=rev(linemates_season$num_last_name_2_label) )
 
-this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2_label, fill=list(toi_pct=0) ) %>% 
-                            filter( !is.na(num_last_name_2))
-# partition: self vs other
-this_player_toi_games  <- this_player_games_fill %>% filter( num_last_name_2 == this_player_num_last_name )
-this_player_games_fill <- this_player_games_fill %>% filter( num_last_name_2 != this_player_num_last_name )
+this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2_label, fill=list(toi_pct=0) ) 
+
+# partition: self only (EV) vs linemates
+this_player_toi_games  <- this_player_games_fill %>% filter( num_last_name_2_label == this_player_num_last_name_label )
+this_player_games_fill <- this_player_games_fill %>% filter( num_last_name_2_label != this_player_num_last_name_label )
 
 ```
 
-```{r linemates chart}
+```{r chart param}
+max_games          <- this_player_games_fill$game_number %>% max()
+max_games_floor_10 <- max_games %>% round(-1) # for vertical grid lines
+
 base_size=7
 season_str <- paste0( substr(this_season,1,4), "-", substr(this_season,5,8) )
+```
+
+```{r linemates chart}
 p.linemates <- ggplot( this_player_games_fill, aes(game_number, num_last_name_2_label))
 p.linemates  <- p.linemates + 
-  geom_tile(aes(fill=toi_pct),color="grey50", size=0.1) +
+  geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, 10), color="grey20", size=0.2 ) +
   # scale_x_continuous( limits=c(1,60), breaks=seq(0,100,10) ) + 
-  scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
-  scale_x_continuous("Game Number", breaks=seq(0,100,1), expand = c(0, 0)) + 
+  # scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
+  scale_x_continuous("Game Number", minor_breaks = seq(0,100,1), breaks=seq(0,100,5), expand = c(0, 0)) + 
   scale_y_discrete( "Linemate", expand = c(0, 0)) +
   # labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
-    theme(
-      # plot.background = element_rect(colour = "white"),
+  theme(
       axis.ticks = element_blank(),
-      line = element_line( size=0.2),
+      # line = element_line( size=2),
       # axis.ticks.length = unit(0.1, "cm"),
       legend.position = "none",
-      # plot.margin = rep(unit(0,"lines"),4),
+      plot.margin = rep(unit(0,"lines"),4),
       panel.margin = unit(0,"null"),
-      panel.grid.minor = element_line( colour="white" ),
-      axis.title.y = element_text(size = rel(1.2) ),
-      axis.title.x = element_text(size = rel(1.2) ),
-      axis.text.y = element_text( size = base_size ),
-      axis.text.x = element_text( size = base_size )
+      # panel.grid.minor = element_line( colour="black" ),
+      axis.title.y = element_text( size = rel(1.)  ),
+      axis.title.x = element_text( size = rel(1.)  ),
+      axis.text.y  = element_text( size = base_size ),
+      axis.text.x  = element_text( size = base_size )
     ) 
 
 p.linemates
@@ -184,23 +197,37 @@ p.linemates
 p.this_player_toi <- ggplot( this_player_toi_games, aes(x=game_number,y=toi) )
 p.this_player_toi <- p.this_player_toi + 
   geom_line(color="darkred",size=1) +
-  # geom_bar(stat="identity",fill="darkred" ) +
-    scale_y_continuous( "TOI/gm", breaks=seq(0,40,5), limits=c(0,20) ) +
-    scale_x_continuous(breaks=seq(0,100,1), expand = c(0, 0)) + labs(y="TOI/Gm")
+  geom_bar(stat="identity",fill="darkred", alpha=0.1 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, 10), color="grey20", size=0.2 ) +
+  scale_y_continuous( "TOI/gm", breaks=seq(0,40,5), limits=c(0,20) ) +
+  scale_x_continuous(breaks=seq(0,100,1), expand = c(0, 0)) + labs(y="TOI/Gm") +
+  theme(
+    axis.ticks = element_blank(),
+    # line = element_line( size=2),
+    # axis.ticks.length = unit(0.1, "cm"),
+    legend.position = "none",
+    plot.margin = rep(unit(0,"lines"),4),
+    panel.margin = unit(0,"null"),
+    # panel.grid.minor = element_line( colour="black" ),
+    axis.title.y = element_text( size = rel(1.)  ),
+    # axis.title.x = element_text( size = rel(1.)  ),
+    axis.text.y  = element_text( size = base_size )
+    # axis.text.x  = element_text( size = base_size )
+  ) 
 p.this_player_toi
 ```
 
 ```{r combine plots}
-theme_top    <- theme(legend.position="none", plot.margin=unit(c( 0.5,1,-0.3,1), "cm"),
+theme_top    <- theme(legend.position="none", plot.margin=unit(c( 0.5,1,-0.1,1), "cm"),
                       axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
-theme_middle <- theme(legend.position="none", plot.margin=unit(c(-0.3,1,-0.3,1), "cm"),
+theme_middle <- theme(legend.position="none", plot.margin=unit(c(-0.3,1,-0.1,1), "cm"),
   axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
 
 theme_bottom <- theme(legend.position="none", plot.margin=unit(c(-0.5,1,1,1), "cm"))
 
-p.this_player_toi     <- p.this_player_toi + theme_bw() + theme_middle
-p.this_player_toi_top <- p.this_player_toi + theme_bw() + theme_top
-p.linemates           <- p.linemates       + theme_bw() theme_bottom
+p.this_player_toi     <- p.this_player_toi + theme_minimal() + theme_middle
+p.this_player_toi_top <- p.this_player_toi + theme_minimal() + theme_top
+# p.linemates           <- p.linemates       + theme_bottom
 
 ```
 
@@ -208,6 +235,21 @@ p.linemates           <- p.linemates       + theme_bw() theme_bottom
 ```{r chart two}
 foo <- rbind_plots( list(p.this_player_toi_top, p.linemates), c(2,8))
 
+
+grid.newpage()
+  png( filename = "tmp.png", width=7, height=4.15, units="in", res=1200,pointsize=1 )
+  par(
+    mar      = c(0, 0, 0, 0),
+    xaxs     = "i",
+    yaxs     = "i",
+    cex.axis = 1,
+    cex.lab  = 1
+  )
+  # grid.draw(g)
+  grid.arrange(foo, main=textGrob(this_player$first_last_name, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE )
+  dev.off()
+  
+  
 grid.newpage()
 grid.draw(foo)
 ```
