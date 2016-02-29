@@ -100,7 +100,8 @@ g.chances + geom_bar( stat="identity", aes(fill=metric), position="dodge") + sta
 ```
 
 ```{r linemates}
-this_player_name <- "Adam Henrique"
+this_player_name <- "Colin Wilson"
+this_player_name <- "Alexander Burmistrov"
 this_season <- "20152016"
 
 this_player <- player_tbl %>% filter( first_last_name==this_player_name ) 
@@ -112,30 +113,38 @@ this_team_games <- team_score %>% filter( season==this_season, session_id==this_
 this_player_id  <- this_player$nhl_id %>% as.numeric()
 this_player_fd  <- this_player$position_fd
 linemates   <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, session_id==this_session_id, filter_score_diff=="all",
-                                                    filter_strength=="ev5on5", nhl_id_1==this_player_id, team_comp=="T") %>% collect()
-linemates <- linemates %>% group_by( game_id4 ) %>% arrange( desc(toi_period_all))
+                                                    filter_strength=="ev5on5", nhl_id_1==this_player_id, team_comp=="T") %>% 
+                                                    group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
 linemates <- linemates %>% left_join( player_tbl %>% 
-                    select( nhl_id_2=nhl_id, number_2=number, last_name_2=last_name, position_fd_2=position_fd), by="nhl_id_2")
-linemates <- linemates %>% filter( position_fd_2==this_player_fd )
+                    select( nhl_id_2=nhl_id, number_2=number, last_name_2=last_name, position_fd_2=position_fd ), by="nhl_id_2" ) %>% 
+                    filter( position_fd_2==this_player_fd ) 
 linemates <- linemates %>% select( game_date, game_id4, toi=toi_period_all, nhl_id_2, number_2, last_name_2 ) %>%
                   mutate( num_last_name_2=paste( number_2, last_name_2 ))
 
-linemates_total <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_name_2 ) %>% summarise( toi=sum(toi) ) %>% ungroup() %>% arrange( desc(toi) )
+# top linemates, by game.  Filter for top 4 (5 including self), > 20% of this player's TOI in a particular game
+top_linemates <- linemates %>% filter( row_number() <=5 ) %>% 
+                      mutate( toi_pct=round( toi/max(toi), 3) ) %>% filter( toi_pct > 0.20 ) %>% 
+                      select( game_id4, num_last_name_2, toi, toi_pct )
+linemates_num_last_name <- top_linemates$num_last_name_2 %>% unique()
 
-top_5_linemates <- linemates %>% filter( row_number() <=6 ) %>% 
-                      mutate( toi_pct=toi/max(toi) ) %>% filter( toi_pct > 0.20 ) %>% 
-                     select( game_id4, num_last_name_2, toi, toi_pct )
-linemates_num_last_name <- top_5_linemates$num_last_name_2 %>% unique()
+# top linemates over season
+linemates_season <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_name_2 ) %>% 
+                        summarise( toi = sum(toi) ) %>% ungroup() %>% 
+                        mutate(
+                            toi_pct_total         = round( 100*(toi/max(toi)), 1 ),
+                            num_last_name_2_label = paste0( num_last_name_2, "\n", "(", toi_pct_total, "%)" )
+                        ) %>% arrange( desc(toi) )
+linemates_season <- linemates_season %>% filter( num_last_name_2 %in% linemates_num_last_name )
 
-linemates_total <- linemates_total %>% filter( num_last_name_2 %in% linemates_num_last_name )
-linemates_num_last_name <- linemates_total$num_last_name_2
+# put it all together by game.
+this_player_games <- this_team_games %>% left_join( top_linemates, by="game_id4" ) %>% 
+                                         left_join( linemates_season %>% select( num_last_name_2, num_last_name_2_label ), by="num_last_name_2" )
+this_player_games$num_last_name_2_label <- factor(this_player_games$num_last_name_2_label, level=rev(linemates_season$num_last_name_2_label) )
 
-this_player_games <- this_team_games %>% left_join( top_5_linemates, by="game_id4" )
-this_player_games$num_last_name_2 <- factor(this_player_games$num_last_name_2, level=rev(linemates_num_last_name ) )
-
-this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2, fill=list(toi_pct=0) ) %>% 
+this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2_label, fill=list(toi_pct=0) ) %>% 
                             filter( !is.na(num_last_name_2))
-this_player_toi_games <- this_player_games_fill  %>% filter( num_last_name_2 == this_player_num_last_name )
+# partition: self vs other
+this_player_toi_games  <- this_player_games_fill %>% filter( num_last_name_2 == this_player_num_last_name )
 this_player_games_fill <- this_player_games_fill %>% filter( num_last_name_2 != this_player_num_last_name )
 
 ```
@@ -143,7 +152,7 @@ this_player_games_fill <- this_player_games_fill %>% filter( num_last_name_2 != 
 ```{r linemates chart}
 base_size=7
 season_str <- paste0( substr(this_season,1,4), "-", substr(this_season,5,8) )
-p.linemates <- ggplot( this_player_games_fill, aes(game_number, num_last_name_2))
+p.linemates <- ggplot( this_player_games_fill, aes(game_number, num_last_name_2_label))
 p.linemates  <- p.linemates + 
   geom_tile(aes(fill=toi_pct),color="grey50", size=0.1) +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
@@ -167,12 +176,17 @@ p.linemates  <- p.linemates +
       axis.text.x = element_text( size = base_size )
     ) 
 
+p.linemates
+
 ```
 
 ```{r linemates chart}
 p.this_player_toi <- ggplot( this_player_toi_games, aes(x=game_number,y=toi) )
-p.this_player_toi <- p.this_player_toi + geom_bar(stat="identity",fill="darkred" ) +
-    scale_x_continuous(breaks=seq(0,100,1), expand = c(0, 0))
+p.this_player_toi <- p.this_player_toi + 
+  geom_line(color="darkred",size=1) +
+  # geom_bar(stat="identity",fill="darkred" ) +
+    scale_y_continuous( "TOI/gm", breaks=seq(0,40,5), limits=c(0,20) ) +
+    scale_x_continuous(breaks=seq(0,100,1), expand = c(0, 0)) + labs(y="TOI/Gm")
 p.this_player_toi
 ```
 
@@ -184,12 +198,19 @@ theme_middle <- theme(legend.position="none", plot.margin=unit(c(-0.3,1,-0.3,1),
 
 theme_bottom <- theme(legend.position="none", plot.margin=unit(c(-0.5,1,1,1), "cm"))
 
-p.this_player_toi <- p.this_player_toi + theme_bw() + theme_middle
+p.this_player_toi     <- p.this_player_toi + theme_bw() + theme_middle
 p.this_player_toi_top <- p.this_player_toi + theme_bw() + theme_top
-# p.linemates <- p.linemates + theme_bottom
+p.linemates           <- p.linemates       + theme_bw() theme_bottom
 
 ```
 
+
+```{r chart two}
+foo <- rbind_plots( list(p.this_player_toi_top, p.linemates), c(2,8))
+
+grid.newpage()
+grid.draw(foo)
+```
 
 
 ```{r chart em}
