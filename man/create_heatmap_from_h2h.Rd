@@ -11,7 +11,7 @@ create_heatmap_from_h2h(h2h, value_type = "toi", row_num_last_names,
 \arguments{
 \item{h2h}{Data frame of num_last_name_1, num_last_name_2 pairs with value}
 
-\item{value_type}{"TOI" or other}
+\item{value_type}{"toi" or other. The variable name in h2h containing values to plot}
 
 \item{row_num_last_names}{Sorted vector of num_last_name. All will appear even if not in h2h}
 

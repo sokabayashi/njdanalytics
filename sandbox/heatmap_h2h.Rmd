@@ -37,9 +37,9 @@ our_game_id4s        <- our_games$game_id4
 ```{r vs opp}
 this_opp_team_short <- "CAR"
 vs_opp_games     <- our_games %>% filter( opp_team_short==this_opp_team_short )
-vs_opp_game_id4s <- vs_opp_games$game_id4
 # drop first game against CAR. W 5-1 but a weird game
-vs_opp_game_id4s <- vs_opp_game_id4s[-1]
+vs_opp_games     <- vs_opp_games %>% slice(-1)
+vs_opp_game_id4s <- vs_opp_games$game_id4
 
 toi_h2h_ev           <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, game_id4 %in% vs_opp_game_id4s,
                                                      filter_score_diff=="all", filter_strength=="ev5on5") %>% collect()
@@ -66,6 +66,8 @@ toi_h2h <- aggregate_toi_h2h( toi_h2h_ev, vs_opp_rosters_group )
 
 ```{r our F}
 # rows = _1, cols = _2
+our_team_short
+
 toi_h2h_our_F      <- toi_h2h %>% filter( team_short_1==our_team_short, team_short_2==our_team_short,
                                           position_fd_1=="F", position_fd_2=="F" )
 
@@ -90,7 +92,7 @@ col_num_last_names <- vs_opp_rosters_group %>% filter( team_short==this_opp_team
 
 create_heatmap_from_h2h( toi_h2h_vs, value_type="toi", row_num_last_names, col_num_last_names,
                           row_axis_title = "NJD", col_axis_title = "CAR", chart_title = "NJD vs. CAR",
-                          chart_filename="sandbox/njd-car.png" )
+                          chart_filename="sandbox/njd-car2.png" )
 ```
 
 
