@@ -4,8 +4,8 @@
 #' @param this_season Season string, "20152016" by default.
 #' @param this_session_id Session ID, "2" by default.
 #' @param player_tbl tbl of "player" from db.  already collected.
-#' @param toi_h2h tbl of "game_h2h"
-#' @param team_score tbl of "team_score"
+#' @param game_h2h tbl of "game_h2h".  Uncollected.
+#' @param team_score tbl of "team_score".  Uncollected.
 #'
 #' @return data frame with game_number, num_last_name_2_label, toi_pct
 #' @export
@@ -15,7 +15,7 @@ get_linemates_by_game <- function(
   this_season="20152016",
   this_session_id="2",
   player_tbl,
-  toi_h2h_ev,
+  game_h2h,
   team_score ) {
 
   this_player <- player_tbl %>% filter( first_last_name==this_player_name ) %>% collect()
@@ -27,16 +27,19 @@ get_linemates_by_game <- function(
   ### ASSUMPTION: player is NOT traded.  using his current team_short from player_tbl and grabbing all games for that team
   # A more advanced version of this function should provide a df with game_number, game_id4
   this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
-    select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>% arrange( game_date ) %>% collect()
+                                    select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
+                                    arrange( game_date ) %>% collect()
 
-  linemates   <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, session_id==this_session_id, filter_score_diff=="all",
-    filter_strength=="ev5on5", nhl_id_1==this_player_id, team_comp=="T") %>%
-    group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
+  linemates   <- game_h2h %>% filter( season==this_season, session_id==this_session_id,
+                                      filter_score_diff=="all", filter_strength=="ev5on5",
+                                      nhl_id_1==this_player_id, team_comp=="T") %>%
+                              group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
   linemates <- linemates %>% left_join( player_tbl %>%
-      select( nhl_id_2=nhl_id, number_2=number, last_name_2=last_name, position_fd_2=position_fd ), by="nhl_id_2" ) %>%
-    filter( position_fd_2==this_player_fd )
+                                        select( nhl_id_2=nhl_id, number_2=number, last_name_2=last_name, position_fd_2=position_fd ),
+                                        by="nhl_id_2" ) %>%
+                             filter( position_fd_2==this_player_fd )
   linemates <- linemates %>% select( game_date, game_id4, toi=toi_period_all, nhl_id_2, number_2, last_name_2 ) %>%
-    mutate( num_last_name_2=paste( number_2, last_name_2 ))
+                             mutate( num_last_name_2=paste( number_2, last_name_2 ) )
 
   # Top linemates, by game.
   # Filter for
@@ -44,25 +47,26 @@ get_linemates_by_game <- function(
   #   > 20% of this player's TOI in a particular game
   linemate_limit <- ifelse( this_player_fd=="F", 5, 4 )
   top_linemates  <- linemates %>% filter( row_number() <=linemate_limit ) %>%
-    mutate( toi_pct=round( toi/max(toi), 3) ) %>% filter( toi_pct > 0.20 ) %>%
-    select( game_id4, num_last_name_2, toi, toi_pct )
+                                  mutate( toi_pct=round( toi/max(toi), 3) ) %>% filter( toi_pct > 0.20 ) %>%
+                                  select( game_id4, num_last_name_2, toi, toi_pct )
   linemates_num_last_name <- top_linemates$num_last_name_2 %>% unique() # list of all linemates
 
   # Top linemates over full season.  Want to put TOI% in axislabel
   linemates_season <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_name_2 ) %>%
-    summarise( toi = sum(toi) ) %>% ungroup() %>%
-    mutate(
-      toi_pct_total         = round( 100*(toi/max(toi)), 1 ),
-      num_last_name_2_label = paste0( num_last_name_2, "\n", "(", toi_pct_total, "%)" )
-    ) %>% arrange( desc(toi) )
+                                    summarise( toi = sum(toi) ) %>% ungroup() %>%
+                                    mutate(
+                                      toi_pct_total         = round( 100*(toi/max(toi)), 1 ),
+                                      num_last_name_2_label = paste0( num_last_name_2, "\n", "(", toi_pct_total, "%)" )
+                                    ) %>% arrange( desc(toi) )
   linemates_season <- linemates_season %>% filter( num_last_name_2 %in% linemates_num_last_name )
   this_player_num_last_name_label <- linemates_season$num_last_name_2_label[1]
 
   # put it all together by game. Start with team_games so we can complete() missing games
   this_player_games <- this_team_games %>% left_join( top_linemates, by="game_id4" ) %>%
-    left_join( linemates_season %>%
-        select( num_last_name_2, num_last_name_2_label ), by="num_last_name_2" )
-  this_player_games$num_last_name_2_label <- factor(this_player_games$num_last_name_2_label, level=rev(linemates_season$num_last_name_2_label) )
+                                           left_join( linemates_season %>%
+                                                      select( num_last_name_2, num_last_name_2_label ), by="num_last_name_2" )
+  this_player_games$num_last_name_2_label <- factor( this_player_games$num_last_name_2_label,
+                                                     level=rev(linemates_season$num_last_name_2_label) )
 
   this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2_label, fill=list(toi_pct=0) )
 
@@ -88,7 +92,7 @@ group_roster_by_lines_from_h2h <- function( roster, toi_h2h_ev ) {
   # join individual ev TOI.  missing for G
   toi_individual <- toi_h2h_ev %>% filter( ha_number_1==ha_number_2 )
   roster <- roster %>% left_join( toi_individual %>% select( ha_number=ha_number_1, toi_ev5on5=toi_period_all), by="ha_number" )
-  roster$position_fd    <- ifelse( roster$position=="D", "D", ifelse( roster$position=="G", "G", "F") )
+  roster$position_fd     <- ifelse( roster$position=="D", "D", ifelse( roster$position=="G", "G", "F") )
   roster$rank_toi_ev5on5 <- roster$rank_toi_ev5on5_adj <- NA
 
   toi_h2h_ev <- toi_h2h_ev %>% select( starts_with( "ha_number"), toi=toi_period_all ) %>%

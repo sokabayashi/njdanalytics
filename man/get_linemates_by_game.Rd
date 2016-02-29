@@ -5,7 +5,7 @@
 \title{Get linemates by game}
 \usage{
 get_linemates_by_game(this_player_name, this_season = "20152016",
-  this_session_id = "2", player_tbl, toi_h2h_ev, team_score)
+  this_session_id = "2", player_tbl, game_h2h, team_score)
 }
 \arguments{
 \item{this_player_name}{String of first_last_name (capitalize first letters only)}
@@ -16,9 +16,9 @@ get_linemates_by_game(this_player_name, this_season = "20152016",
 
 \item{player_tbl}{tbl of "player" from db.  already collected.}
 
-\item{team_score}{tbl of "team_score"}
+\item{game_h2h}{tbl of "game_h2h".  Uncollected.}
 
-\item{toi_h2h}{tbl of "game_h2h"}
+\item{team_score}{tbl of "team_score".  Uncollected.}
 }
 \value{
 data frame with game_number, num_last_name_2_label, toi_pct
