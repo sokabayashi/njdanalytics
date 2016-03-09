@@ -118,9 +118,7 @@ supplement_game_info <- function( game_info, our_team="NJD" ) {
       their_team <- game_info$away_team_short
     } else {
       their_team <- game_info$home_team_short
-      our_ha   <- "A"
-      row_ha   <- "A"
-      col_ha   <- "H"
+      our_ha <- "A"; row_ha  <- "A"; col_ha <- "H"
     }
   } else {
     # non-NJD game, set default (row) perspective to Home team
@@ -130,6 +128,7 @@ supplement_game_info <- function( game_info, our_team="NJD" ) {
 
   game_info <- game_info %>% mutate(
     our_ha     = our_ha,
+    their_ha   = ifelse( our_ha=="H", "A", "H" ),
     row_ha     = row_ha,
     col_ha     = col_ha,
     our_team   = our_team,
