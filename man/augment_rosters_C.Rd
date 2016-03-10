@@ -4,7 +4,7 @@
 \alias{augment_rosters_C}
 \title{Augment roster with faceoff count, center designation, num_last_name}
 \usage{
-augment_rosters_C(roster, pbp_df, player_tbl, center_faceoff_rank_cutoff = 4)
+augment_rosters_C(roster, pbp_df, player_tbl, center_fo_cutoff = 4)
 }
 \arguments{
 \item{roster}{Data frame as from stage_game for arbitrary number of games}

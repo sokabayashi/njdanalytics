@@ -94,8 +94,8 @@ tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_
                                                    ifelse( shot_ha == our_ha,    "scf", "sca" )
                           )
   )
-  shots_pairs_group <- shots_pairs_m %>% select( ha_number_1, ha_number_2, sc_perspective, shot_count ) %>%
-                                         spread( sc_perspective, shot_count ) %>% select(  ha_number_1, ha_number_2, scf, sca )
+  shots_pairs_group <- shots_pairs_m %>% select( ha_number_1, ha_number_2, teamcomp, sc_perspective, shot_count ) %>%
+                                         spread( sc_perspective, shot_count ) %>% select(  ha_number_1, ha_number_2, teamcomp, scf, sca )
 
   shots_pairs_group
 }
