@@ -38,10 +38,10 @@ tally_sc_by_ha_number <- function( shots_df_filter ) {
 
 #' Tally scoring chances by pairs of ha_number.
 #'
-#' Perspective is important: when pairs are on same team, scf is from those players' perspective, regardless of our team or their team.
+#' Perspective: when pairs are on same team, scf is from those players' perspective, regardless of our team or their team.
 #' When different teams, the scf is from our_ha.
 #'
-#' @param shots_df_filter
+#' @param shots_df_filter Shots df already filtered for color and strength.
 #' @param roster from stage_roster
 #' @param our_ha H or A
 #' @param their_ha H or A
@@ -50,6 +50,10 @@ tally_sc_by_ha_number <- function( shots_df_filter ) {
 #' @export
 #'
 tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_ha ) {
+
+  if( !nrow(shots_df_filter ) ) {
+    return( data_frame( ha_number_1=character(), ha_number_2=character(), scf=integer(), sca=integer() ) )
+  }
 
   goalies    <- roster %>% filter( position == "G" ) %>% select( ha_number ) %>% unlist()
   ha_numbers <- roster %>% filter( position != "G" ) %>% select( ha_number ) %>%
