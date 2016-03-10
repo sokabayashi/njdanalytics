@@ -438,11 +438,12 @@ augment_roster <- function( roster, pbp_df, player ) {
 #' @return Data frame of rosters with additional columns: faceoff count, is_center, num_last_name, L/R
 #' @export
 #'
-augment_rosters_C <- function( roster, pbp_df, player_tbl, center_faceoff_rank_cutoff=4 ) {
+augment_rosters_C <- function( roster, pbp_df, player_tbl, center_fo_cutoff=4 ) {
   # Figure out our centers. Make C the first row on a forward line.
   faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 ) %>%
                                 select( event_player1, event_p1_id, event_player2, event_p2_id, event_team_ha )
 
+  # need to summation at H, A level and not nhl_id because faceoff win is determined by ha
   fac_a <- faceoffs_ev5on5 %>% group_by( event_player1, event_p1_id ) %>%
     summarise( fo_w = sum( event_team_ha == substr(event_player1, 1, 1) ),
                fo_l = sum( event_team_ha != substr(event_player1, 1, 1) ) ) %>%
@@ -453,11 +454,16 @@ augment_rosters_C <- function( roster, pbp_df, player_tbl, center_faceoff_rank_c
                fo_l = sum( event_team_ha != substr(event_player2, 1, 1) ) ) %>%
     rename( ha_number = event_player2, nhl_id=event_p2_id )
 
-  fac_player <- bind_rows( fac_a, fac_h )
+  fac_player <- bind_rows( fac_a, fac_h ) %>% select( -ha_number )
+  fac_player <- fac_player %>% group_by( nhl_id ) %>% summarize(
+                  fo_w = sum( fo_w ),
+                  fo_l = sum( fo_l )
+  ) %>% ungroup()
+
   faceoff_cnt_df <- fac_player %>% mutate(
                                           faceoff_cnt = fo_w + fo_l,
                                           fo_pct      = round( fo_w / faceoff_cnt, 3 )
-                                   ) %>% select( -ha_number )
+                                   )
 
   # faceoff_cnt_df  <-    data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p2_id ) )
 
@@ -478,7 +484,7 @@ augment_rosters_C <- function( roster, pbp_df, player_tbl, center_faceoff_rank_c
 
   # Top 4 faceoff count on each team is C
   roster_augmented <- roster_augmented %>% group_by( team_short ) %>% arrange( desc(faceoff_cnt ) ) %>%
-    mutate( is_center=row_number() <= center_faceoff_rank_cutoff )
+    mutate( is_center=row_number() <= center_fo_cutoff )
 
   roster_augmented$position_fd <- factor( roster_augmented$position_fd, levels=c("F", "D", "G") )
   retval <- roster_augmented %>% group_by( team_short, position_fd ) %>% arrange( desc(toi), position_fd )
