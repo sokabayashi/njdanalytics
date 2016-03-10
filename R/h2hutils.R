@@ -411,7 +411,7 @@ aggregate_toi_h2h <- function( toi_h2h_ev, rosters_C ) {
 augment_roster <- function( roster, pbp_df, player ) {
   # Figure out our centers. Make C the first row on a forward line.
   faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 )
-  faceoff_cnt_df  <- data_frame( ha_number=c( faceoffs_ev5on5$event_player1, faceoffs_ev5on5$event_player2 ))
+  faceoff_cnt_df  <- data_frame( ha_number=c( faceoffs_ev5on5$event_player1, faceoffs_ev5on5$event_player2 ) )
   centers_df      <- faceoff_cnt_df %>% group_by( ha_number ) %>% summarize( faceoff_cnt=n() )
 
   # Also nice to have L/R shot for D pairing.
@@ -440,17 +440,36 @@ augment_roster <- function( roster, pbp_df, player ) {
 #'
 augment_rosters_C <- function( roster, pbp_df, player_tbl, center_faceoff_rank_cutoff=4 ) {
   # Figure out our centers. Make C the first row on a forward line.
-  faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 )
-  # faceoff_cnt_df  <- data_frame( ha_number=c( faceoffs_ev5on5$event_player1, faceoffs_ev5on5$event_player2 ))
-  faceoff_cnt_df  <- data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p2_id ))
-  centers_df      <- faceoff_cnt_df %>% group_by( nhl_id ) %>% summarize( faceoff_cnt=n() )
+  faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 ) %>%
+                                select( event_player1, event_p1_id, event_player2, event_p2_id, event_team_ha )
+
+  fac_a <- faceoffs_ev5on5 %>% group_by( event_player1, event_p1_id ) %>%
+    summarise( fo_w = sum( event_team_ha == substr(event_player1, 1, 1) ),
+               fo_l = sum( event_team_ha != substr(event_player1, 1, 1) ) ) %>%
+    rename( ha_number=event_player1, nhl_id=event_p1_id )
+
+  fac_h <- faceoffs_ev5on5  %>% group_by( event_player2, event_p2_id ) %>%
+    summarize( fo_w = sum( event_team_ha == substr(event_player2, 1, 1) ),
+               fo_l = sum( event_team_ha != substr(event_player2, 1, 1) ) ) %>%
+    rename( ha_number = event_player2, nhl_id=event_p2_id )
+
+  fac_player <- bind_rows( fac_a, fac_h )
+  faceoff_cnt_df <- fac_player %>% mutate(
+                                          faceoff_cnt = fo_w + fo_l,
+                                          fo_pct      = round( fo_w / faceoff_cnt, 3 )
+                                   ) %>% select( -ha_number )
+
+  # faceoff_cnt_df  <-    data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p2_id ) )
+
+  # faceoff_cnt_df  <- data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p2_id ) )
+  # centers_df      <- faceoff_cnt_df %>% group_by( nhl_id ) %>% summarize( faceoff_cnt=n() )
 
   # CAREFUL.  player can get traded and play against former team
   roster_augmented <- roster %>% group_by( team_short, nhl_id ) %>%
     summarize( gm=n(), toi=mean(toi_total) ) %>% ungroup()
   roster_augmented <- roster_augmented %>%
     left_join( player_tbl %>% select( nhl_id, number, last_name, shoots, position, position_fd ), by="nhl_id" ) %>%
-    left_join( centers_df, by="nhl_id" ) %>%
+    left_join( faceoff_cnt_df, by= "nhl_id"  ) %>%
     mutate( num_last_name=paste( number, str_to_upper(last_name) ) )
 
   roster_augmented[ is.na(roster_augmented) ] <- 0
