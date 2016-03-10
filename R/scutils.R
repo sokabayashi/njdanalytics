@@ -36,7 +36,10 @@ tally_sc_by_ha_number <- function( shots_df_filter ) {
 }
 
 
-#' tally scoring chances by pairs of ha_number
+#' Tally scoring chances by pairs of ha_number.
+#'
+#' Perspective is important: when pairs are on same team, scf is from those players' perspective, regardless of our team or their team.
+#' When different teams, the scf is from our_ha.
 #'
 #' @param shots_df_filter
 #' @param roster from stage_roster
@@ -57,7 +60,7 @@ tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_
     ha_numbers_list = on_ice_ha_numbers %>% gsub( paste( goalies, collapse="|" ), "", . ) %>%
                                             str_extract_all( "(\\w+)" ) %>%
                                             llply( sort ),
-    pair            = ha_numbers_list %>% laply( get_pairs_of_ha_numbers )
+    pair            = ha_numbers_list %>% laply( get_pairs_of_ha_numbers ) # one direction only
   )
 
   shots_pairs_unnested <- shots_df_filter %>% select( event_team_ha, pair ) %>% unnest()
@@ -65,21 +68,29 @@ tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_
     A = sum( event_team_ha=="A" ),
     H = sum( event_team_ha=="H" )
   )
+  shots_pairs_table <- shots_pairs_table %>% ungroup() %>% separate( pair, c("ha_number_1", "ha_number_2" ) )
 
   # quick check
   # shots_df_filter %>% filter( event_team_ha=="A", grepl( "A02", on_ice_ha_numbers ), grepl( "A14", on_ice_ha_numbers ) ) %>%
   #       select( clock, event_team_ha, on_ice_ha_numbers )
-  shots_pairs_table <- shots_pairs_table %>% ungroup() %>% separate( pair, c("ha_number_1", "ha_number_2" ) )
 
-  # from OUR perspective, using supplied our_ha, their_ha
-  shots_pairs_table_colnames <- names( shots_pairs_table )
-  our_sf_col   <- shots_pairs_table_colnames==our_ha
-  their_sf_col <- shots_pairs_table_colnames==their_ha
-  shots_pairs_table_colnames[ our_sf_col   ] <- "sf" # SF Devils
-  shots_pairs_table_colnames[ their_sf_col ] <- "sa" # SA Devils
-  names( shots_pairs_table ) <- shots_pairs_table_colnames
+  ## Switch SC perspective from H and A to For and Against.
+  ## probably a better way to do this using standard evaluation to relate first character of team to column A or H
+  ## but haven't figured that out yet... here is a tidyr way basically melt (gather) and reshape (spread).
+  shots_pairs_m <- shots_pairs_table %>% gather( shot_ha, shot_count, -c(1,2) ) %>% arrange( ha_number_1, ha_number_2 )
+  shots_pairs_m <- shots_pairs_m %>% mutate(
+                          team_ha_1 = substr(ha_number_1, 1, 1 ),
+                          team_ha_2 = substr(ha_number_2, 1, 1 ),
+                          teamcomp  = ifelse( team_ha_1 == team_ha_2, "T", "C" ),
+                          sc_perspective = ifelse( teamcomp=="T",
+                                                   ifelse( shot_ha == team_ha_1, "scf", "sca" ),
+                                                   ifelse( shot_ha == our_ha,    "scf", "sca" )
+                          )
+  )
+  shots_pairs_group <- shots_pairs_m %>% select( ha_number_1, ha_number_2, sc_perspective, shot_count ) %>%
+                                         spread( sc_perspective, shot_count ) %>% select(  ha_number_1, ha_number_2, scf, sca )
 
-  shots_pairs_table
+  shots_pairs_group
 }
 
 
