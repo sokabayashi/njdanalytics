@@ -52,7 +52,10 @@ tally_sc_by_ha_number <- function( shots_df_filter ) {
 tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_ha ) {
 
   if( !nrow(shots_df_filter ) ) {
-    return( data_frame( ha_number_1=character(), ha_number_2=character(), scf=integer(), sca=integer() ) )
+    # Return empty actually creates problem for the cbind()
+    # return( data_frame( ha_number_1=character(), ha_number_2=character(), scf=integer(), sca=integer() ) )
+
+    return( data_frame( ha_number_1=roster$ha_number[1], ha_number_2=roster$ha_number[2], scf=0, sca=0 ) )
   }
 
   goalies    <- roster %>% filter( position == "G" ) %>% select( ha_number ) %>% unlist()

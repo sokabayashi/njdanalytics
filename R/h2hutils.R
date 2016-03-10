@@ -442,7 +442,7 @@ augment_rosters_C <- function( roster, pbp_df, player_tbl, center_faceoff_rank_c
   # Figure out our centers. Make C the first row on a forward line.
   faceoffs_ev5on5 <- pbp_df %>% filter( event_type=="FAC", ev5on5 )
   # faceoff_cnt_df  <- data_frame( ha_number=c( faceoffs_ev5on5$event_player1, faceoffs_ev5on5$event_player2 ))
-  faceoff_cnt_df  <- data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p1_id ))
+  faceoff_cnt_df  <- data_frame( nhl_id=c( faceoffs_ev5on5$event_p1_id, faceoffs_ev5on5$event_p2_id ))
   centers_df      <- faceoff_cnt_df %>% group_by( nhl_id ) %>% summarize( faceoff_cnt=n() )
 
   # CAREFUL.  player can get traded and play against former team
