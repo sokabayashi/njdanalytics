@@ -296,7 +296,7 @@ create_heatmap_from_h2h <- function(
     text.x.adj       <- 0.39           # nudge values in cell to right
   } else {
     # Corsi, chances
-    tile_color.low   <- muted( "red" ) # red negative values
+    tile.color.low   <- muted( "red" ) # red negative values
     sprintf_format   <- "%s"           # no decimal place
     text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
   }
