@@ -169,10 +169,22 @@ add_team_score_label <- function( team_score_subset, our_team="NJD" ) {
 #' Get every pair combination from a vector of players.
 #'
 #' @param ha_numbers Vector of ha_number, already sorted alphabetically
+#' @param symmetric Flag.  if TRUE, include (a,a), (a,b), (b,a), (b,b).  if FALSE, only (a,b).  TRUE by default.
 #' @return list of every pairwise combination
 #' @export
-get_pairs_of_ha_numbers <- function( ha_numbers ) {
-  ha_numbers %>% combn(2, simplify=F) %>% laply(paste, collapse=" " ) %>% list()
+get_pairs_of_ha_numbers <- function( ha_numbers, symmetric=TRUE ) {
+
+  pairs <- ha_numbers  %>% combn(2, simplify=F) %>% laply(paste, collapse=" " )
+
+  if( !symmetric ) {
+    return( pairs )
+
+  } else {
+    pairs_self <- paste( ha_numbers, ha_numbers )
+    pairs_rev  <- rev(ha_numbers) %>% combn(2, simplify=F) %>% laply(paste, collapse=" " )
+
+    return( c( pairs_self, pairs, pairs_rev ) %>% sort() %>% list() )
+  }
 }
 
 

@@ -4,10 +4,12 @@
 \alias{get_pairs_of_ha_numbers}
 \title{Get every pair combination from a vector of players.}
 \usage{
-get_pairs_of_ha_numbers(ha_numbers)
+get_pairs_of_ha_numbers(ha_numbers, symmetric = TRUE)
 }
 \arguments{
 \item{ha_numbers}{Vector of ha_number, already sorted alphabetically}
+
+\item{symmetric}{Flag.  if TRUE, include (a,a), (a,b), (b,a), (b,b).  if FALSE, only (a,b).  TRUE by default.}
 }
 \value{
 list of every pairwise combination

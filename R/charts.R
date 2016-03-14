@@ -278,6 +278,8 @@ create_heatmap_from_h2h <- function(
   h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(row_num_last_names ) ) # rev order for y axis
   h2h$num_last_name_2 <- factor( h2h$num_last_name_2, levels=    (col_num_last_names ) )
 
+  h2h$value <- h2h[[ value_type ]]
+
   base_size <- 5.3
   tile.color.high  <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
   text.size        <- 1.7  ## to populate matrix
@@ -287,26 +289,28 @@ create_heatmap_from_h2h <- function(
   } else if( length(row_num_last_names) > 18 ) {
     text.size <- 1.5
   }
-  value.low.cutoff <- 1  # don't even display value at all below this value
-  fill.low.cutoff  <- 3  # don't fill color at all below this value
+  value.low.cutoff <- 1  # don't even display value at all for abs below this value
+
 
   if( value_type=="toi" ) {
     tile.color.low   <- "white"        # positive values only.  white for 0.
     sprintf_format   <- "%.1f"         # 1 decimal place
     text.x.adj       <- 0.39           # nudge values in cell to right
+    fill.hi.cutoff   <- quantile( h2h$value, 0.8 ) # above this percentile, all colors are same.
+    fill.low.cutoff  <- 3              # don't fill color at all below this value
   } else {
     # Corsi, chances
     tile.color.low   <- muted( "red" ) # red negative values
     sprintf_format   <- "%s"           # no decimal place
     text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
+    fill.hi.cutoff   <- quantile( h2h$value, 0.95 ) # above this percentile, all colors are same.
+    fill.low.cutoff  <- 2              # don't fill color at all below this value in abs
   }
 
-  h2h$value <- h2h[[ value_type ]]
-  fill.hi.cutoff   <- quantile( h2h$value, 0.8 ) # 80th percentile?  above this level, all colors are same.
   h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
-    value         = ifelse( abs(value) <= value.low.cutoff, 0, round(value, 1) ), # don't even display TOI < 1.0
+    value         = ifelse( abs(value) < value.low.cutoff, 0, round(value, 1) ), # don't even display TOI < 1.0
 
     # value_display is text that populates cell.  Don't display "0.0"
     value_display = sprintf( sprintf_format, value ),

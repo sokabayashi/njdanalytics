@@ -55,7 +55,7 @@ tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_
     # Return empty actually creates problem for the cbind()
     # return( data_frame( ha_number_1=character(), ha_number_2=character(), scf=integer(), sca=integer() ) )
 
-    return( data_frame( ha_number_1=roster$ha_number[1], ha_number_2=roster$ha_number[2], scf=0, sca=0 ) )
+    return( data_frame( ha_number_1=roster$ha_number[1], ha_number_2=roster$ha_number[2], scf=0, sca=0, team_comp="T") )
   }
 
   goalies    <- roster %>% filter( position == "G" ) %>% select( ha_number ) %>% unlist()
@@ -88,16 +88,54 @@ tally_sc_by_ha_number_pairs <- function( shots_df_filter, roster, our_ha, their_
   shots_pairs_m <- shots_pairs_m %>% mutate(
                           team_ha_1 = substr(ha_number_1, 1, 1 ),
                           team_ha_2 = substr(ha_number_2, 1, 1 ),
-                          teamcomp  = ifelse( team_ha_1 == team_ha_2, "T", "C" ),
-                          sc_perspective = ifelse( teamcomp=="T",
+                          team_comp  = ifelse( team_ha_1 == team_ha_2, "T", "C" ),
+                          sc_perspective = ifelse( team_comp=="T",
                                                    ifelse( shot_ha == team_ha_1, "scf", "sca" ),
                                                    ifelse( shot_ha == our_ha,    "scf", "sca" )
                           )
   )
-  shots_pairs_group <- shots_pairs_m %>% select( ha_number_1, ha_number_2, teamcomp, sc_perspective, shot_count ) %>%
-                                         spread( sc_perspective, shot_count ) %>% select(  ha_number_1, ha_number_2, teamcomp, scf, sca )
+  shots_pairs_group <- shots_pairs_m %>% select( ha_number_1, ha_number_2, team_comp, sc_perspective, shot_count ) %>%
+                                         spread( sc_perspective, shot_count ) %>% select(  ha_number_1, ha_number_2, team_comp, scf, sca )
 
   shots_pairs_group
+}
+
+
+
+#' Aggregate sc_h2h
+#'
+#' @param sc_h2h Ev5on5 SC h2h data across multiple games
+#' @param rosters_C Roster augmented with C info
+#'
+#' @return sc_h2h A summarized sc_h2h
+#' @export
+#'
+aggregate_sc_h2h <- function( sc_h2h, rosters_C ) {
+
+  sc_h2h <- sc_h2h %>% mutate(
+                team_comp = ifelse( team_short_1==team_short_2, "T", "C" )
+  )
+
+  sc_h2h_summary <- sc_h2h %>% group_by( nhl_id_1, nhl_id_2, team_comp, metric ) %>%
+    summarise(
+              scf = sum( scf ),
+              sca = sum( sca ),
+              sc_net = sum( sc_net )
+      ) %>% ungroup()
+
+  sc_h2h_summary <- sc_h2h_summary %>%
+    left_join( rosters_C %>%
+        select( nhl_id_1=nhl_id, num_last_name_1=num_last_name, position_fd_1=position_fd, team_short_1=team_short,
+          faceoff_cnt_1=faceoff_cnt, is_center_1=is_center ),
+      by="nhl_id_1"
+    ) %>%
+    left_join( rosters_C  %>%
+        select( nhl_id_2=nhl_id, num_last_name_2=num_last_name, position_fd_2=position_fd, team_short_2=team_short,
+          faceoff_cnt_2=faceoff_cnt, is_center_2=is_center ),
+      by="nhl_id_2"
+    )
+
+  sc_h2h_summary
 }
 
 
