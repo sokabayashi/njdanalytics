@@ -3,7 +3,7 @@ library( njdanalytics )
 nhl_db <- setup_nhl_db()
 
 this_season <- "20152016"
-# this_season <- "20132014"
+# this_season <- "20142015"
 home_team_score <- tbl( nhl_db, "team_score" ) %>% filter( season==this_season, session_id=="2", ha=="H" ) %>%
                     arrange( game_date ) %>% collect()
 
@@ -35,7 +35,7 @@ sum( season_summary$so ) / sum( season_summary$otso )
 g.so <- ggplot( season_summary,aes(x=game_month, y=so_prop, group=1 ) )
 g.so + geom_line(size=1) + geom_point(size=2) +
   scale_x_discrete("") +
-  scale_y_continuous("Shootout%", limits=c(0,0.6), label=percent) +
+  scale_y_continuous("Shootout%", limits=c(0,0.7), label=percent) +
   ggtitle( "2015-2016: Proportion of OT games that go to Shootout" )
 
 njd_games <- tbl( nhl_db, "team_score" ) %>% filter( season==this_season, session_id=="2", team_short=="NJD" ) %>%
