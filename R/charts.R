@@ -307,7 +307,10 @@ create_heatmap_from_h2h <- function(
     text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
     fill.high.cutoff  <- quantile( h2h$value, 0.97 ) # above this percentile, all colors are same.
     fill.low.cutoff   <- quantile( h2h$value, 0.03 ) # below this percentile, all colors are same.
-    fill.zero.cutoff <- 2              # don't fill color at all below this value in abs
+    fill.zero.cutoff  <- 2              # don't fill color at all below this value in abs
+    if( fill.high.cutoff >= 0 & fill.high.cutoff <= fill.zero.cutoff ) {
+      fill.high.cutoff <- max( h2h$value )
+    }
   }
 
   num_row_players <- length( row_num_last_names )
@@ -357,8 +360,9 @@ create_heatmap_from_h2h <- function(
     # text location on heatmap
     x_value_display = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
     # black text on saturated colors is hard to read.  make high values (>70% of max value) white.
-    text_color = ifelse( value_fill > text.fill.cutoff.pct*max(value_fill) |  value_fill <text.fill.cutoff.pct*min(value_fill),
-                         "white", "black")
+    # text_color = ifelse( value_fill > text.fill.cutoff.pct*max(value_fill) |  value_fill <text.fill.cutoff.pct*min(value_fill),
+                         # "white", "black")
+    text_color = ifelse( abs(value_fill) > text.fill.cutoff.pct*max(abs(value_fill)), "white", "black")
   )
 
   p.mat <- ggplot( h2h_fill, aes(x=num_last_name_2, y=num_last_name_1) ) +
@@ -367,10 +371,11 @@ create_heatmap_from_h2h <- function(
   if( value_type=="toi" | fill.low.cutoff > -1*fill.zero.cutoff ) {
     p.mat <- p.mat + scale_fill_gradient( low="white", high=tile.color.high, guide=FALSE, space="Lab" )
   } else {
-    p.mat <- p.mat + scale_fill_gradientn( colours=c( tile.color.low, "white", high=tile.color.high ),
-                                           values=rescale( c( sign(fill.low.cutoff)*fill.low.cutoff^2, -1*fill.zero.cutoff^2, 0,
-                                                                                   fill.zero.cutoff^2, fill.high.cutoff^2) ),
-                                           guide=FALSE, space="Lab" )
+    p.mat <- p.mat + scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" )
+    # p.mat <- p.mat + scale_fill_gradientn( colours=c( tile.color.low, "white", high=tile.color.high ),
+    #                                        values=rescale( c( sign(fill.low.cutoff)*fill.low.cutoff^2, -1*fill.zero.cutoff^2, 0,
+    #                                                                                fill.zero.cutoff^2, fill.high.cutoff^2) ),
+    #                                        guide=FALSE, space="Lab" )
   }
 
   p.mat <- p.mat + geom_text( aes( x=x_value_display, label=value_display, colour=text_color ), size=text.size, hjust=1 ) +
