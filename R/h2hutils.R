@@ -326,7 +326,7 @@ group_multigame_rosters_by_lines <- function( rosters_C, toi_h2h_ev ) {
       rank <- rank + additional_players
 
       ## Remove linemates from non_C and toi_h2h_copy
-      D_only   <- D_only %>% anti_join( this_line, by="nhl_id" )
+      D_only   <- D_only %>% anti_join( this_line, by="nhl_id" ) %>% arrange( desc(toi) )
       n_D      <- nrow( D_only )
       toi_h2h_copy <- toi_h2h_copy %>% filter( !nhl_id_2 %in% this_line$nhl_id )
 
@@ -383,7 +383,7 @@ group_multigame_rosters_by_lines <- function( rosters_C, toi_h2h_ev ) {
 #'
 aggregate_toi_h2h <- function( toi_h2h_ev, rosters_C ) {
 
-  toi_h2h <- toi_h2h_ev %>% group_by( nhl_id_1, nhl_id_2, team_comp ) %>%
+  toi_h2h <- toi_h2h_ev %>% group_by( nhl_id_1, nhl_id_2, team_comp ) %>% # note team_comp needed in case player traded, e.g., Jagr
     summarise( toi=sum(toi_period_all) ) %>% ungroup()
 
   rosters_1 <- rosters_2 <- rosters_C
