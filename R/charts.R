@@ -295,12 +295,13 @@ create_heatmap_from_h2h <- function(
     fill.hi.cutoff   <- quantile( h2h$value, 0.85 ) # above this percentile, all colors are same.
     fill.low.cutoff  <- 3              # don't fill color at all below this value
   } else {
-    # Corsi, chances
+    # Corsi or scoring chances
     tile.color.low   <- muted( "red" ) # red negative values
     sprintf_format   <- "%s"           # no decimal place
     text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
     fill.hi.cutoff   <- quantile( h2h$value, 0.95 ) # above this percentile, all colors are same.
-    fill.low.cutoff  <- 2              # don't fill color at all below this value in abs
+    fill.lo.cutoff   <- quantile( h2h$value, 0.05 ) # below this percentile, all colors are same.
+    fill.zero.cutoff <- 2              # don't fill color at all below this value in abs
   }
 
   num_row_players <- length( row_num_last_names )
@@ -332,7 +333,8 @@ create_heatmap_from_h2h <- function(
 
     # value fill controls the color of the each cell
     value_fill    = pmin( value, fill.hi.cutoff ),
-    value_fill    = ifelse( abs(value_fill) <= fill.low.cutoff, 0, value_fill ), # below cutoff, no fill color
+    value_fill    = pmax( value, fill.lo.cutoff ),
+    value_fill    = ifelse( abs(value_fill) <= fill.zero.cutoff, 0, value_fill ), # below cutoff, no fill color
     value_fill    = sign(value)*(value_fill^2),   # exaggerates differences of colors
 
     # text location on heatmap
