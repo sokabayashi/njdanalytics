@@ -260,6 +260,8 @@ create_player_heatmap <- function(
 #' @param col_num_F_lines Number of forward lines in col players.  Default is 0.
 #' @param row_num_D_pairs Number of D pairs in row players.  Default is 0.
 #' @param col_num_D_pairs Number of D pairs in col players.  Default is 0.
+#' @param row_num_F Number of F row players. Default is 0.
+#' @param col_num_F Number of F col players. Default is 0.
 #' @param row_axis_title String
 #' @param col_axis_title String
 #' @param chart_title String
@@ -275,6 +277,7 @@ create_heatmap_from_h2h <- function(
   col_num_last_names,
   row_num_F_lines=0, col_num_F_lines=0,
   row_num_D_pairs=0, col_num_D_pairs=0,
+  row_num_F=0, col_num_F=0,
   row_axis_title = "",
   col_axis_title = "",
   chart_title    = "",
@@ -287,17 +290,18 @@ create_heatmap_from_h2h <- function(
 
   h2h$value <- h2h[[ value_type ]]
 
-  base_size <- 5.3
-  tile.color.high  <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
-  text.size        <- 1.7  ## to populate matrix
-  value.low.cutoff <- 1  # don't even display value at all for abs below this value
+  tile.color.high      <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
+  base_size            <- 5.3
+  text.size            <- 1.7  ## to populate matrix
+  value.low.cutoff     <- 1  # don't even display value at all for abs below this value
   text.fill.cutoff.pct <- 0.75 # above this percentile, make text white to make easier to read
+  color.separator      <- "red2"
 
   if( value_type=="toi" ) {
     tile.color.low   <- "white"        # positive values only.  white for 0.
     sprintf_format   <- "%.1f"         # 1 decimal place
     text.x.adj       <- 0.39           # nudge values in cell to right
-    fill.high.cutoff <- quantile( h2h$value, 0.85 ) # above this percentile, all colors are same.
+    fill.high.cutoff <- quantile( h2h$value, 0.95 ) # above this percentile, all colors are same.
     fill.low.cutoff  <- 3               # don't fill color at all below this value
     fill.zero.cutoff <- fill.low.cutoff # don't fill color at all below this value in abs.
   } else {
@@ -313,6 +317,8 @@ create_heatmap_from_h2h <- function(
     }
   }
 
+
+  # Adjustments to base and text size ---------------------------------------
   num_row_players <- length( row_num_last_names )
   num_col_players <- length( col_num_last_names )
   if( num_row_players <= 8 || num_col_players <= 8 ) {
@@ -342,6 +348,21 @@ create_heatmap_from_h2h <- function(
   message( "text x adj: ", text.x.adj )
   message( "base_size:  ", base_size )
 
+  # 4 F lines, 3 pairs D - usually
+  x.line.separators <- c(seq( 0, 12, 3 ), seq( 14, 18, 2 )) + 0.5 ## F then D
+  y.line.separators <- c(seq( 0,  6, 2 ), seq(  9, 18, 3 )) + 0.5 ## D then F
+  x.FD.separators <- c( 0, 12, 18 ) + 0.5
+  y.FD.separators <- c( 0,  6, 18 ) + 0.5
+  # sometimes 7 D though
+  if( row_num_D == 7 ) {
+    y.line.separators <- c(seq( 1,  7, 2 ), 9, seq(  12, 18, 3 )) + 0.5 ## D then F
+    y.FD.separators <- c( 0,  7, 18 ) + 0.5
+  }
+  if( col_num_D == 7 ) {
+    x.line.separators <- c(seq( 0, 9, 3 ), 11, seq( 13, 17, 2 )) + 0.5 ## F then D
+    x.FD.separators <- c( 0, 11, 18 ) + 0.5
+  }
+
   h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
@@ -360,8 +381,6 @@ create_heatmap_from_h2h <- function(
     # text location on heatmap
     x_value_display = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
     # black text on saturated colors is hard to read.  make high values (>70% of max value) white.
-    # text_color = ifelse( value_fill > text.fill.cutoff.pct*max(value_fill) |  value_fill <text.fill.cutoff.pct*min(value_fill),
-                         # "white", "black")
     text_color = ifelse( abs(value_fill) > text.fill.cutoff.pct*max(abs(value_fill)), "white", "black")
   )
 
@@ -372,14 +391,16 @@ create_heatmap_from_h2h <- function(
     p.mat <- p.mat + scale_fill_gradient( low="white", high=tile.color.high, guide=FALSE, space="Lab" )
   } else {
     p.mat <- p.mat + scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" )
-    # p.mat <- p.mat + scale_fill_gradientn( colours=c( tile.color.low, "white", high=tile.color.high ),
-    #                                        values=rescale( c( sign(fill.low.cutoff)*fill.low.cutoff^2, -1*fill.zero.cutoff^2, 0,
-    #                                                                                fill.zero.cutoff^2, fill.high.cutoff^2) ),
-    #                                        guide=FALSE, space="Lab" )
   }
 
   p.mat <- p.mat + geom_text( aes( x=x_value_display, label=value_display, colour=text_color ), size=text.size, hjust=1 ) +
     scale_colour_manual( values=c( "black", "white"), guide=FALSE )
+
+  # F/D separators
+  # p.mat <- p.mat + geom_vline( xintercept=x.line.separators, size=0.25,  color=color.separator ) +
+  #   geom_hline( yintercept=y.line.separators, size=0.25, color=color.separator ) +
+  #   geom_vline( xintercept=x_FD.separators,   size=0.25, color="black"         ) +
+  #   geom_hline( yintercept=y.FD.separators,   size=0.25, color="black" )
 
   # axis djustments
   p.mat <- p.mat +
