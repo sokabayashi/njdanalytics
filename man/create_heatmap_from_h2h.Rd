@@ -5,8 +5,10 @@
 \title{Create heatmap gtable object from h2h data}
 \usage{
 create_heatmap_from_h2h(h2h, value_type = "toi", row_num_last_names,
-  col_num_last_names, row_axis_title = "", col_axis_title = "",
-  chart_title = "", chart_filename = "tmp.png")
+  col_num_last_names, row_num_F_lines = 0, col_num_F_lines = 0,
+  row_num_D_pairs = 0, col_num_D_pairs = 0, row_num_D = 0,
+  col_num_D = 0, row_axis_title = "", col_axis_title = "",
+  chart_title = "", chart_filename = "tmp.png", width_to_height_ratio = 1)
 }
 \arguments{
 \item{h2h}{Data frame of num_last_name_1, num_last_name_2 pairs with value}
@@ -16,6 +18,18 @@ create_heatmap_from_h2h(h2h, value_type = "toi", row_num_last_names,
 \item{row_num_last_names}{Sorted vector of num_last_name. All will appear even if not in h2h}
 
 \item{col_num_last_names}{Sorted vector of num_last_name  All will appear even if not in h2h}
+
+\item{row_num_F_lines}{Number of forward lines in row players.  Default is 0.  This is for F line separators.}
+
+\item{col_num_F_lines}{Number of forward lines in col players.  Default is 0.  This is for F line separators.}
+
+\item{row_num_D_pairs}{Number of D pairs in row players.  Default is 0.  This is for D pair separators.}
+
+\item{col_num_D_pairs}{Number of D pairs in col players.  Default is 0.  This is for D pair separators.}
+
+\item{row_num_D}{Number of F row players. Default is 0.  This is for F-D separator lines.}
+
+\item{col_num_D}{Number of F col players. Default is 0.  This is for F-D separator lines.}
 
 \item{row_axis_title}{String}
 

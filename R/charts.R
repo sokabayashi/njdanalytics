@@ -256,12 +256,12 @@ create_player_heatmap <- function(
 #' @param value_type "toi" or other. The variable name in h2h containing values to plot
 #' @param row_num_last_names Sorted vector of num_last_name. All will appear even if not in h2h
 #' @param col_num_last_names Sorted vector of num_last_name  All will appear even if not in h2h
-#' @param row_num_F_lines Number of forward lines in row players.  Default is 0.
-#' @param col_num_F_lines Number of forward lines in col players.  Default is 0.
-#' @param row_num_D_pairs Number of D pairs in row players.  Default is 0.
-#' @param col_num_D_pairs Number of D pairs in col players.  Default is 0.
-#' @param row_num_F Number of F row players. Default is 0.
-#' @param col_num_F Number of F col players. Default is 0.
+#' @param row_num_F_lines Number of forward lines in row players.  Default is 0.  This is for F line separators.
+#' @param col_num_F_lines Number of forward lines in col players.  Default is 0.  This is for F line separators.
+#' @param row_num_D_pairs Number of D pairs in row players.  Default is 0.  This is for D pair separators.
+#' @param col_num_D_pairs Number of D pairs in col players.  Default is 0.  This is for D pair separators.
+#' @param row_num_D Number of F row players. Default is 0.  This is for F-D separator lines.
+#' @param col_num_D Number of F col players. Default is 0.  This is for F-D separator lines.
 #' @param row_axis_title String
 #' @param col_axis_title String
 #' @param chart_title String
@@ -277,7 +277,7 @@ create_heatmap_from_h2h <- function(
   col_num_last_names,
   row_num_F_lines=0, col_num_F_lines=0,
   row_num_D_pairs=0, col_num_D_pairs=0,
-  row_num_F=0, col_num_F=0,
+  row_num_D=0, col_num_D=0,
   row_axis_title = "",
   col_axis_title = "",
   chart_title    = "",
@@ -348,21 +348,6 @@ create_heatmap_from_h2h <- function(
   message( "text x adj: ", text.x.adj )
   message( "base_size:  ", base_size )
 
-  # 4 F lines, 3 pairs D - usually
-  x.line.separators <- c(seq( 0, 12, 3 ), seq( 14, 18, 2 )) + 0.5 ## F then D
-  y.line.separators <- c(seq( 0,  6, 2 ), seq(  9, 18, 3 )) + 0.5 ## D then F
-  x.FD.separators <- c( 0, 12, 18 ) + 0.5
-  y.FD.separators <- c( 0,  6, 18 ) + 0.5
-  # sometimes 7 D though
-  if( row_num_D == 7 ) {
-    y.line.separators <- c(seq( 1,  7, 2 ), 9, seq(  12, 18, 3 )) + 0.5 ## D then F
-    y.FD.separators <- c( 0,  7, 18 ) + 0.5
-  }
-  if( col_num_D == 7 ) {
-    x.line.separators <- c(seq( 0, 9, 3 ), 11, seq( 13, 17, 2 )) + 0.5 ## F then D
-    x.FD.separators <- c( 0, 11, 18 ) + 0.5
-  }
-
   h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
@@ -396,11 +381,43 @@ create_heatmap_from_h2h <- function(
   p.mat <- p.mat + geom_text( aes( x=x_value_display, label=value_display, colour=text_color ), size=text.size, hjust=1 ) +
     scale_colour_manual( values=c( "black", "white"), guide=FALSE )
 
+  # separators
+  col.FD.separators   <- row.FD.separators   <- vector()
+  col.line.separators <- row.line.separators <- vector()
+
+  row_num_F <- num_row_players - row_num_D
+  col_num_F <- num_col_players - col_num_D
+  if( row_num_D > 0 && row_num_F > 0 ) {
+    row.FD.separators <- c( row_num_D ) + 0.5
+  }
+  if( col_num_D > 0 && row_num_F > 0  ) {
+    col.FD.separators <- c( col_num_F ) + 0.5
+  }
+
+  ## col: F then D.  this is easier
+  if( col_num_F_lines > 0 ) {
+    col.line.separators <- seq( 3, (col_num_F_lines)*3, 3 )
+  }
+  if( col_num_D_pairs > 0 ) {
+    col.line.separators <- c( col.line.separators, seq( col_num_F+2, col_num_F+2 + (col_num_D_pairs-1)*2, 2 ) )
+  }
+  col.line.separators <- col.line.separators + 0.5 ## F then D
+
+  # row: D then F.  some care needed.
+  if( row_num_D_pairs > 0 ) {
+    row.line.separators <- seq( row_num_D, row_num_D-row_num_D_pairs*2, -2 )
+  }
+  if( row_num_F_lines > 0 ) {
+    row.line.separators <- c( row.line.separators, seq( num_row_players-3, num_row_players - row_num_F_lines*3, -3 ) )
+  }
+  row.line.separators <- row.line.separators + 0.5
+
   # F/D separators
-  # p.mat <- p.mat + geom_vline( xintercept=x.line.separators, size=0.25,  color=color.separator ) +
-  #   geom_hline( yintercept=y.line.separators, size=0.25, color=color.separator ) +
-  #   geom_vline( xintercept=x_FD.separators,   size=0.25, color="black"         ) +
-  #   geom_hline( yintercept=y.FD.separators,   size=0.25, color="black" )
+  p.mat <- p.mat +
+    geom_vline( xintercept=col.line.separators, size=0.25,  color=color.separator ) +
+    geom_hline( yintercept=row.line.separators, size=0.25, color=color.separator ) +
+    geom_vline( xintercept=col.FD.separators,   size=0.25, color="black"         ) +
+    geom_hline( yintercept=row.FD.separators,   size=0.25, color="black" )
 
   # axis djustments
   p.mat <- p.mat +
