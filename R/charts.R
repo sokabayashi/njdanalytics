@@ -269,10 +269,13 @@ create_heatmap_from_h2h <- function(
   value_type = "toi", # variable name in h2h containing values to plot
   row_num_last_names,
   col_num_last_names,
+  row_num_F_lines=0, col_num_F_lines=0,
+  row_num_D_pairs=0, col_num_D_pairs=0,
   row_axis_title = "",
   col_axis_title = "",
   chart_title    = "",
-  chart_filename = "tmp.png"
+  chart_filename = "tmp.png",
+  width_to_height_ratio = 1
 ) {
 
   h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(row_num_last_names ) ) # rev order for y axis
@@ -283,20 +286,13 @@ create_heatmap_from_h2h <- function(
   base_size <- 5.3
   tile.color.high  <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
   text.size        <- 1.7  ## to populate matrix
-  if( length(row_num_last_names) <= 5 ) {
-    text.size <- 3
-    base_size <- 6
-  } else if( length(row_num_last_names) > 18 ) {
-    text.size <- 1.5
-  }
   value.low.cutoff <- 1  # don't even display value at all for abs below this value
-
 
   if( value_type=="toi" ) {
     tile.color.low   <- "white"        # positive values only.  white for 0.
     sprintf_format   <- "%.1f"         # 1 decimal place
     text.x.adj       <- 0.39           # nudge values in cell to right
-    fill.hi.cutoff   <- quantile( h2h$value, 0.8 ) # above this percentile, all colors are same.
+    fill.hi.cutoff   <- quantile( h2h$value, 0.85 ) # above this percentile, all colors are same.
     fill.low.cutoff  <- 3              # don't fill color at all below this value
   } else {
     # Corsi, chances
@@ -307,7 +303,25 @@ create_heatmap_from_h2h <- function(
     fill.low.cutoff  <- 2              # don't fill color at all below this value in abs
   }
 
-  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
+  num_row_players <- length( row_num_last_names )
+  num_col_players <- length( col_num_last_names )
+  if( num_row_players <= 8 || num_col_players <= 8 ) {
+    text.size <- 3
+    base_size <- 6
+  } else if( (num_row_players > 18 & num_row_players <= 22) || (num_col_players > 18 & num_col_players <= 22) ) {
+    text.size <- 1.5
+    base_size <- 5
+  } else if( num_row_players > 22 || num_col_players > 22) {
+    text.size <- 1.3
+    base_size <- 4
+
+    if( str_detect(value_type, "_60" ) ) {
+      text.size  <- 1.2
+      text.x.adj <- 0.48
+    }
+  }
+
+    h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
     value         = ifelse( abs(value) < value.low.cutoff, 0, round(value, 1) ), # don't even display TOI < 1.0
@@ -336,8 +350,8 @@ create_heatmap_from_h2h <- function(
   # axis djustments
   p.mat <- p.mat +
     labs( x = col_axis_title, y = row_axis_title ) +
-    scale_x_discrete(expand = c(0, 0)) + scale_y_discrete(expand = c(0, 0)) + coord_fixed(ratio=1) +
-    theme_bw( base_size = base_size ) +
+    scale_x_discrete(expand = c(0, 0)) + scale_y_discrete(expand = c(0, 0)) +
+    coord_fixed(ratio=1) + theme_bw( base_size = base_size ) +
     theme(
       axis.ticks = element_blank(),
       line = element_line( size=0.2),
@@ -355,7 +369,7 @@ create_heatmap_from_h2h <- function(
   g <- move_heatmap_xaxis_to_top( p.mat )
 
   message( "Save heatmap to ", chart_filename  )
-  save_heatmap_png(g, chart_title, filename=chart_filename, base_size )
+  save_heatmap_png(g, chart_title, filename=chart_filename, base_size, width_to_height_ratio )
 }
 
 
@@ -417,12 +431,14 @@ move_heatmap_xaxis_to_top <- function( p.mat ) {
   g
 }
 
-save_heatmap_png <- function( g, gtitle, filename="tmp.png", base_size=5) {
+save_heatmap_png <- function( g, gtitle, filename="tmp.png", base_size=5, width_to_height_ratio=1) {
 
+  chart_width  <- 3.9 * width_to_height_ratio
+  chart_height <- 4.15
   if( !str_detect(filename, ".png" ) ) {
     filename = paste0( filename, ".png" )
   }
-  png( filename = filename, width=3.9, height=4.15, units="in", res=1200,pointsize=1 )
+  png( filename = filename, width=chart_width, height=chart_height, units="in", res=1200,pointsize=1 )
   par(
     mar      = c(0, 0, 0, 0),
     xaxs     = "i",
