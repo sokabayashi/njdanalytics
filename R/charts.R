@@ -256,6 +256,10 @@ create_player_heatmap <- function(
 #' @param value_type "toi" or other. The variable name in h2h containing values to plot
 #' @param row_num_last_names Sorted vector of num_last_name. All will appear even if not in h2h
 #' @param col_num_last_names Sorted vector of num_last_name  All will appear even if not in h2h
+#' @param row_num_F_lines Number of forward lines in row players.  Default is 0.
+#' @param col_num_F_lines Number of forward lines in col players.  Default is 0.
+#' @param row_num_D_pairs Number of D pairs in row players.  Default is 0.
+#' @param col_num_D_pairs Number of D pairs in col players.  Default is 0.
 #' @param row_axis_title String
 #' @param col_axis_title String
 #' @param chart_title String
@@ -287,20 +291,22 @@ create_heatmap_from_h2h <- function(
   tile.color.high  <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
   text.size        <- 1.7  ## to populate matrix
   value.low.cutoff <- 1  # don't even display value at all for abs below this value
+  text.fill.cutoff.pct <- 0.75 # above this percentile, make text white to make easier to read
 
   if( value_type=="toi" ) {
     tile.color.low   <- "white"        # positive values only.  white for 0.
     sprintf_format   <- "%.1f"         # 1 decimal place
     text.x.adj       <- 0.39           # nudge values in cell to right
-    fill.hi.cutoff   <- quantile( h2h$value, 0.85 ) # above this percentile, all colors are same.
-    fill.low.cutoff  <- 3              # don't fill color at all below this value
+    fill.high.cutoff <- quantile( h2h$value, 0.85 ) # above this percentile, all colors are same.
+    fill.low.cutoff  <- 3               # don't fill color at all below this value
+    fill.zero.cutoff <- fill.low.cutoff # don't fill color at all below this value in abs.
   } else {
     # Corsi or scoring chances
     tile.color.low   <- muted( "red" ) # red negative values
     sprintf_format   <- "%s"           # no decimal place
     text.x.adj       <- 0.27           # smaller nudge since have negative sign to deal with
-    fill.hi.cutoff   <- quantile( h2h$value, 0.95 ) # above this percentile, all colors are same.
-    fill.lo.cutoff   <- quantile( h2h$value, 0.05 ) # below this percentile, all colors are same.
+    fill.high.cutoff  <- quantile( h2h$value, 0.97 ) # above this percentile, all colors are same.
+    fill.low.cutoff   <- quantile( h2h$value, 0.03 ) # below this percentile, all colors are same.
     fill.zero.cutoff <- 2              # don't fill color at all below this value in abs
   }
 
@@ -310,8 +316,11 @@ create_heatmap_from_h2h <- function(
     text.size <- 3
     base_size <- 6
   } else if( (num_row_players > 18 & num_row_players <= 22) || (num_col_players > 18 & num_col_players <= 22) ) {
-    text.size <- 1.5
-    base_size <- 5
+    text.size <- 1.6
+    base_size <- 4.5
+    if( value_type=="toi" ) {
+      text.size <- 1.3
+    }
   } else if( num_row_players > 22 || num_col_players > 22) {
     text.size <- 1.3
     base_size <- 4
@@ -322,7 +331,15 @@ create_heatmap_from_h2h <- function(
     }
   }
 
-    h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
+  message( "num rows:   ", num_row_players )
+  message( "num cols:   ", num_col_players )
+  message( "fill high:  ", fill.high.cutoff )
+  message( "fill low:   ", fill.low.cutoff )
+  message( "text size:  ", text.size )
+  message( "text x adj: ", text.x.adj )
+  message( "base_size:  ", base_size )
+
+  h2h_fill <- h2h %>% complete( num_last_name_1, num_last_name_2, fill=list(value=0) ) # fill in missing pairs
 
   h2h_fill <- h2h_fill %>% mutate(
     value         = ifelse( abs(value) < value.low.cutoff, 0, round(value, 1) ), # don't even display TOI < 1.0
@@ -332,21 +349,31 @@ create_heatmap_from_h2h <- function(
     value_display = ifelse( value_display == "0" | value_display == "0.0", "", value_display ),
 
     # value fill controls the color of the each cell
-    value_fill    = pmin( value, fill.hi.cutoff ),
-    value_fill    = pmax( value, fill.lo.cutoff ),
+    value_fill    = pmin( value,      fill.high.cutoff ),
+    value_fill    = pmax( value_fill, fill.low.cutoff  ),
     value_fill    = ifelse( abs(value_fill) <= fill.zero.cutoff, 0, value_fill ), # below cutoff, no fill color
     value_fill    = sign(value)*(value_fill^2),   # exaggerates differences of colors
 
     # text location on heatmap
     x_value_display = as.numeric(num_last_name_2) + text.x.adj, # fudge factor to get number centered
     # black text on saturated colors is hard to read.  make high values (>70% of max value) white.
-    text_color = ifelse( abs(value_fill) > 0.7*max(abs(value_fill) ), "white", "black")
+    text_color = ifelse( value_fill > text.fill.cutoff.pct*max(value_fill) |  value_fill <text.fill.cutoff.pct*min(value_fill),
+                         "white", "black")
   )
 
   p.mat <- ggplot( h2h_fill, aes(x=num_last_name_2, y=num_last_name_1) ) +
-    geom_tile( aes( fill=value_fill ), color="gray95", size=0.2 ) +
-    scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" ) +
-    geom_text( aes( x=x_value_display, label=value_display, colour=text_color ), size=text.size, hjust=1 ) +
+    geom_tile( aes( fill=value_fill ), color="gray95", size=0.2 )
+
+  if( value_type=="toi" | fill.low.cutoff > -1*fill.zero.cutoff ) {
+    p.mat <- p.mat + scale_fill_gradient( low="white", high=tile.color.high, guide=FALSE, space="Lab" )
+  } else {
+    p.mat <- p.mat + scale_fill_gradientn( colours=c( tile.color.low, "white", high=tile.color.high ),
+                                           values=rescale( c( sign(fill.low.cutoff)*fill.low.cutoff^2, -1*fill.zero.cutoff^2, 0,
+                                                                                   fill.zero.cutoff^2, fill.high.cutoff^2) ),
+                                           guide=FALSE, space="Lab" )
+  }
+
+  p.mat <- p.mat + geom_text( aes( x=x_value_display, label=value_display, colour=text_color ), size=text.size, hjust=1 ) +
     scale_colour_manual( values=c( "black", "white"), guide=FALSE )
 
   # axis djustments
