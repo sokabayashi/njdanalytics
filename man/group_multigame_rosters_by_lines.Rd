@@ -18,7 +18,11 @@ Data frame of roster sorted by lines and D pairs.
 Group forward line & D pairs together within each team's roster.
 Across games, this can get messy so we need to establish some rules:
  1. every player on a team appears exactly once
- 2. 4 forward lines of 3 F, 3 pairs of D
+ 2. Forward lines of 3 F, 3 pairs of D
  3. excess F and D are appended on in descending order of TOI all strength
+}
+\details{
+rosters_C has Centers identified already with is_center=TRUE.  There will be as many
+forward lines as there are Centers.
 }
 
