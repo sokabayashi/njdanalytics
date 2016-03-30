@@ -4,7 +4,7 @@
 \alias{aggregate_toi_h2h}
 \title{Aggregate toi_h2h}
 \usage{
-aggregate_toi_h2h(toi_h2h_ev, rosters_C)
+aggregate_toi_h2h(toi_h2h_ev, rosters_C, overweight_recent_game = F)
 }
 \arguments{
 \item{toi_h2h_ev}{Ev5on5 toi_h2h data across multiple games}
