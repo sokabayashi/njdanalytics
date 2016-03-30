@@ -244,7 +244,7 @@ create_player_heatmap <- function(
     cex.lab  = 1
   )
   # grid.draw(g)
-  grid.arrange(g, main=textGrob(gtitle, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE )
+  grid.arrange(g, top=textGrob(gtitle, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE )
   dev.off()
 }
 
@@ -266,6 +266,8 @@ create_player_heatmap <- function(
 #' @param col_axis_title String
 #' @param chart_title String
 #' @param chart_filename String
+#' @param width_to_height_ratio Number, Default is 1
+#' @param tile.color.high Hex string. Default is blue "#185AA9".  A good green is "#008C48".
 #'
 #' @return ggplot object
 #' @export
@@ -282,7 +284,8 @@ create_heatmap_from_h2h <- function(
   col_axis_title = "",
   chart_title    = "",
   chart_filename = "tmp.png",
-  width_to_height_ratio = 1
+  width_to_height_ratio = 1,
+  tile.color.high = "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue" #008C48 Green
 ) {
 
   h2h$num_last_name_1 <- factor( h2h$num_last_name_1, levels= rev(row_num_last_names ) ) # rev order for y axis
@@ -290,7 +293,7 @@ create_heatmap_from_h2h <- function(
 
   h2h$value <- h2h[[ value_type ]]
 
-  tile.color.high      <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
+  # tile.color.high      <- "#185AA9" # from Few # show_col(few_pal('dark')(3)) #"steelblue"
   base_size            <- 5.3
   text.size            <- 1.7  ## to populate matrix
   value.low.cutoff     <- 1  # don't even display value at all for abs below this value
@@ -431,10 +434,11 @@ create_heatmap_from_h2h <- function(
       legend.position = "none",
       plot.margin = rep(unit(0,"lines"),4),panel.margin = unit(0,"null"),
       panel.grid.minor = element_line( colour="white" ),
-      axis.title.y = element_text(size = rel(1.2) ),
-      axis.title.x = element_text(size = rel(1.2) ),
+      axis.title.y = element_text(size = rel(1.2), margin=margin(0,7,0,0) ),
+      axis.title.x = element_text(size = rel(1.2), margin=margin(0,0,2,0) ),
       axis.text.y  = element_text( size = base_size ),
       axis.text.x  = element_text( size = base_size,  angle = 90, hjust = 0, vjust = 0.5 )
+      # axis.text.x  = element_text( size = base_size,  angle = 45, hjust = 0, vjust = 0. )
     )
 
   # xaxis correction
@@ -474,7 +478,7 @@ move_heatmap_xaxis_to_top <- function( p.mat ) {
   g <- gtable_add_grob(g, ax, 2, 4, 2, 4)
 
   ## add new row for upper axis label
-  g <- gtable_add_rows(g, unit(10,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
+  g <- gtable_add_rows(g, unit(12,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
   g <- gtable_add_rows(g, g$heights[1], 1)
   g <- gtable_add_grob(g, g$grobs[[6]], 2, 4, 2, 4) ## add axis label to top
 
@@ -495,7 +499,7 @@ move_heatmap_xaxis_to_top <- function( p.mat ) {
   g$heights[[ia_out]] <- unit( 0, "cm" )
   #
   g <- gtable_trim( g )
-  g <- gtable_add_rows(g, unit(10,"lines"), 0) ## Sai's addition for extra spacing between axis label and axis title
+  g <- gtable_add_rows(g, unit(12,"lines"), 0) ## Sai's addition for extra spacing on right of plot. increase for diagonal labels
   # g[["widths"]][3] <- list(unit(0.5, "line"))
 
     # grid.newpage()
@@ -519,7 +523,7 @@ save_heatmap_png <- function( g, gtitle, filename="tmp.png", base_size=5, width_
     cex.lab  = 1
   )
   # grid.draw(g)
-  grid.arrange(g, main=textGrob(gtitle, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE )
+  grid.arrange(g, main=textGrob(gtitle, gp=gpar(fontsize=base_size+3), vjust=2.), clip=TRUE )
   dev.off()
 }
 
