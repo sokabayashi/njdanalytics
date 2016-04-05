@@ -375,7 +375,7 @@ create_heatmap_from_h2h <- function(
   p.mat <- ggplot( h2h_fill, aes(x=num_last_name_2, y=num_last_name_1) ) +
     geom_tile( aes( fill=value_fill ), color="gray95", size=0.2 )
 
-  if( value_type=="toi" | fill.low.cutoff > -1*fill.zero.cutoff ) {
+  if( value_type=="toi" | (fill.low.cutoff > -1*fill.zero.cutoff & fill.high.cutoff > fill.zero.cutoff ) ) {
     p.mat <- p.mat + scale_fill_gradient( low="white", high=tile.color.high, guide=FALSE, space="Lab" )
   } else {
     p.mat <- p.mat + scale_fill_gradient2( low=tile.color.low, high=tile.color.high, guide=FALSE, space="Lab" )
