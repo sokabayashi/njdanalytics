@@ -3,7 +3,7 @@ library( njdanalytics )
 nhl_db <- setup_nhl_db()
 
 # MANUALLY UPDATE
-game_suffix <- 68
+game_suffix <- 79
 
 this_season     <- "20152016"
 this_session_id <- "2"
@@ -36,10 +36,11 @@ game_player          <- game_player          %>% filter( season==this_season, se
 
 # njd_games, shots_tbl, player_chances_df, njd_players_by_game, pair_chances_df
 load( file=paste0( nhl_dir$shot, "/njd_through_", game_suffix, ".RData" ))
+shots_df$event_team <- ifelse( shots_df$event_team=="TB", "TBL", shots_df$event_team )
 
 # vs a specific team ------------------------------------------------------
 
-opponent <- "WSH"
+opponent <- "TBL"
 games_vs_opp <- njd_games %>% filter( opp_team_short==opponent )
 
 this_game_number <- games_vs_opp$game_number
@@ -145,6 +146,18 @@ if( nrow(games_vs_opp) == 1 ) {
 vs_opp_rosters_C      <- augment_rosters_C( vs_opp_rosters, vs_opp_pbp, player_tbl, center_fo_cutoff = num_centers  )
 vs_opp_rosters_group  <- group_multigame_rosters_by_lines( vs_opp_rosters_C, toi_h2h_ev_gm )
 
+col_num_last_names <- vs_opp_rosters_group %>% filter( team_short==this_opp_team_short, position_fd != "G" ) %>%
+  select( num_last_name ) %>% unlist(use.names = F)
+
+# custom_opp_1st_line <- c( "92 KUZNETSOV", "8 OVECHKIN", "14 WILLIAMS" )
+# opp_num_last_names  <- c( custom_opp_1st_line, col_num_last_names[!col_num_last_names %in% custom_opp_1st_line])
+#
+# opp_num_last_names_sort_df <- data_frame( num_last_name=opp_num_last_names, rank_custom=1:length(opp_num_last_names) )
+#
+# vs_opp_rosters_group <- vs_opp_rosters_group %>% left_join( opp_num_last_names_sort_df, by="num_last_name" ) %>%
+#                           arrange( rank_custom )
+# player_chances_vs_opp <- player_chances_vs_opp %>% left_join( vs_opp_rosters_group %>% select( nhl_id, rank_custom), by="nhl_id" ) %>%
+#   arrange( rank_custom )
 
 # roster
 roster_sorted <- vs_opp_rosters_group
@@ -309,10 +322,11 @@ sc_blue_summary_all - sc_blue_summary_ev
 
 
 
+player_chances_vs_opp_ev %>% filter( metric=="green", last_name %in% c( "KUZNETSOV", "OVECHKIN", "WILLIAMS") )
+player_chances_vs_opp_ev %>% filter( metric=="green", last_name %in% c( "BACKSTROM", "OSHIE", "BURAKOVSKY") )
 
-
-
-
+player_chances_vs_opp_ev %>% filter( metric=="green", last_name %in% c( "HENRIQUE", "ZAJAC") )
+player_chances_vs_opp_ev %>% filter( metric=="green", last_name %in% c( "GREENE") )
 
 
 
