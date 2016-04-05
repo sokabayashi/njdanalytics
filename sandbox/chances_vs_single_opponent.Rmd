@@ -19,6 +19,7 @@ team_score           <- tbl( nhl_db, "team_score"       )
 stage_game           <- tbl( nhl_db, "stage_game"       )
 stage_roster         <- tbl( nhl_db, "stage_roster"     )
 stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay" )
+game_player          <- tbl( nhl_db, "game_player"      )
 team_tbl             <- tbl( nhl_db, "team"             ) %>% collect()
 
 this_season     <- "20152016"
@@ -29,8 +30,8 @@ fig_dir <- paste0( nhl_dir$shot, "/opponent/fig" )
 
 #########################################################################
 # MANUALLY UPDATE
-game_suffix <- 73
-this_opp_team_short <- "FLA"
+game_suffix <- 79
+this_opp_team_short <- "TBL"
 #########################################################################
 
 # njd_games has game_number and game_id4 to join different data sources
@@ -53,10 +54,15 @@ vs_opp_games         <- our_games %>% filter( opp_team_short==this_opp_team_shor
 our_team_common      <- team_tbl %>% filter( name_short==our_team_short      ) %>% select( name_common ) %>% unlist( use.names = F )
 opp_team_common      <- team_tbl %>% filter( name_short==this_opp_team_short ) %>% select( name_common ) %>% unlist( use.names = F )
 
+vs_opp_games
+
+######################### FILTER GAMES
+vs_opp_games %<>% slice(-1)
+
+
 # drop any games as needed
 # vs_opp_games        <- vs_opp_games %>% slice(-1)
 vs_opp_game_id4s    <- c( "0", vs_opp_games$game_id4 )  # dummy game to make the %in% filter possible
-vs_opp_game_numbers <- vs_opp_games$game_number
 
 # Note: game_h2h is symmetric: (player_A, Player_B) and (player_B, player_A) are both in table
 toi_h2h_ev_gm       <- tbl( nhl_db, "game_h2h" ) %>% filter( season==this_season, game_id4 %in% vs_opp_game_id4s,
@@ -65,8 +71,10 @@ vs_opp_rosters      <- stage_roster %>%
                           filter( season==this_season, session_id==this_session_id, game_id4 %in% vs_opp_game_id4s ) %>% collect()
 vs_opp_pbp          <- stage_playbyplay %>% 
                           filter( season==this_season, session_id==this_session_id, game_id4 %in% vs_opp_game_id4s ) %>% collect()
+vs_opp_stage_game   <- stage_game %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% vs_opp_game_id4s ) %>% collect()
 
-vs_opp_pair_chances <- pair_chances_df %>% filter( game_number %in% vs_opp_game_numbers ) %>% select( -starts_with( "ha_number" ))
+vs_opp_pair_chances <- pair_chances_df %>% filter( game_id4 %in% vs_opp_game_id4s ) %>% select( -starts_with( "ha_number" ))
 sc_h2h_ev_gm       <- vs_opp_pair_chances %>% filter( strength=="ev5on5" )
 
 player_chances_vs_opp <- player_chances_df %>% filter( season==this_season, game_id4 %in% vs_opp_game_id4s )
@@ -77,13 +85,44 @@ sc_by_game_green_ev <- sc_by_game_green_ev %>% left_join( vs_opp_games, by = c( 
 sc_by_game_green_ev
 ```
 
+```{r EV PP TOI}
+njd_game_player      <- game_player %>% 
+                          filter( season==this_season, session_id==this_session_id, team_short==our_team_short, game_id4 %in% vs_opp_game_id4s,
+                                  nhl_id==1,
+                                  filter_period=="all", filter_score_diff=="all", 
+                                  filter_strength %in% c( "ev5on5", "sh", "pp", "own_en", "comp_en" ) ) %>% collect()
+
+njd_stage_game      <- stage_game %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% vs_opp_game_id4s ) %>% collect()
+
+njd_toi <- njd_game_player %>% select( game_date, filter_strength, toi )
+
+```
+
+```{r}
+
+pp_results_list <- vector("list", nrow(vs_opp_games))
+for( i in 1:nrow(vs_opp_games) ) {
+  pp_results_list[[i]] <- get_pp_results( this_season, this_session_id, vs_opp_games$game_id4[i], team_tbl )  
+}
+
+pp_results <- do.call( "rbind", pp_results_list )
+pp_results <- pp_results %>% left_join( vs_opp_games, by=c( "season", "session_id", "game_id4" ) )
+
+pp_results
+
+# summary by team
+pp_results %>% group_by( team_short ) %>% summarize( goals=sum(goals), ppo=sum(ppo), time=sum(time) )
+```
+
+
 ```{r augment data}
 # 1. add faceoff count, is_center, num_last_name.  
 # 2. Sort rosters of teams, ORDERED F/D/G, with F in groups of 4 lines (C first), D in 3 pairings (L then R shot).
 # Highest TOI/gm C is first of F, highest TOI/gm D is first pairing.
 # Excess F and D are appended on to F and D groups respectively.
 
-if( length(vs_opp_game_numbers) == 1 ) {
+if( nrow(vs_opp_games) == 1 ) {
   num_centers <- 4
 } else {
   num_centers <- 5
@@ -209,6 +248,9 @@ row_num_last_names_F <- vs_opp_rosters_group %>% filter( team_short==our_team_sh
 our_D <-  h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==our_team_short,
                                     position_fd_1=="D", position_fd_2=="D" )
 
+our_F <-  h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==our_team_short,
+                                    position_fd_1=="F", position_fd_2=="F" )
+
 their_F <-  h2h_ev %>% filter( team_short_1==this_opp_team_short, team_short_2==this_opp_team_short,
                                     position_fd_1=="F", position_fd_2=="F" )
 ```
@@ -257,6 +299,46 @@ create_heatmap_from_h2h( our_D, value_type="green_net", row_num_last_names_D, ro
                           row_num_F_lines=0, col_num_F_lines=0,
                           row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=this_row_num_D_pairs,
                           row_num_D=this_row_num_D, col_num_D=this_row_num_D,
+                          row_axis_title = "", col_axis_title = "", chart_title = gtitle,
+                          chart_filename=fname )
+
+gtitle <- paste0( "EV5on5 Blue Chances Devils D Pairings" )
+fname <-  paste0( fig_dir, "/njd-", opp_team_short_lower, "_our_D_blue.png" )
+create_heatmap_from_h2h( our_D, value_type="blue_net", row_num_last_names_D, row_num_last_names_D,
+                          row_num_F_lines=0, col_num_F_lines=0,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=this_row_num_D_pairs,
+                          row_num_D=this_row_num_D, col_num_D=this_row_num_D,
+                          row_axis_title = "", col_axis_title = "", chart_title = gtitle,
+                          chart_filename=fname )
+```
+
+
+```{r chart our F only}
+# NJD ONLY
+gtitle <- paste0( "EV5on5 TOI ", our_team_common, " Forwards" )
+fname <-  paste0( fig_dir, "/njd-", opp_team_short_lower, "_our_F_TOI.png" )
+create_heatmap_from_h2h( our_F, value_type="toi", row_num_last_names_F, row_num_last_names_F,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_row_num_F_lines,
+                          row_num_D_pairs=0, col_num_D_pairs=0,
+                          row_num_D=0, col_num_D=0,
+                          row_axis_title = "", col_axis_title = "", chart_title = gtitle,
+                          chart_filename=fname )
+
+gtitle <- paste0( "EV5on5 Green chances ", our_team_common, " Forwards" )
+fname <-  paste0( fig_dir, "/njd-", opp_team_short_lower, "_our_F_green.png" )
+create_heatmap_from_h2h( our_F, value_type="green_net", row_num_last_names_F, row_num_last_names_F,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_row_num_F_lines,
+                          row_num_D_pairs=0, col_num_D_pairs=0,
+                          row_num_D=0, col_num_D=0,
+                          row_axis_title = "", col_axis_title = "", chart_title = gtitle,
+                          chart_filename=fname )
+
+gtitle <- paste0( "EV5on5 Blue chances ", our_team_common, " Forwards" )
+fname <-  paste0( fig_dir, "/njd-", opp_team_short_lower, "_our_F_blue.png" )
+create_heatmap_from_h2h( our_F, value_type="blue_net", row_num_last_names_F, row_num_last_names_F,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_row_num_F_lines,
+                          row_num_D_pairs=0, col_num_D_pairs=0,
+                          row_num_D=0, col_num_D=0,
                           row_axis_title = "", col_axis_title = "", chart_title = gtitle,
                           chart_filename=fname )
 ```
@@ -534,11 +616,11 @@ player_chances_vs_opp_ev  <- player_chances_vs_opp %>% filter( strength=="ev5on5
 player_chances_vs_opp_all <- player_chances_vs_opp %>% filter( strength=="all" )
 player_chances_vs_opp_pp  <- player_chances_vs_opp %>% filter( strength=="pp" )
 
-sc_green_summary_ev <- player_chances_vs_opp_ev %>% filter( metric=="green", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
-sc_blue_summary_ev  <- player_chances_vs_opp_ev %>% filter( metric=="blue", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
+sc_green_summary_ev <- player_chances_vs_opp_ev %>% filter( metric=="green", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), cf=sum(cf), ca=sum(ca), c_net=sum(c_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
+sc_blue_summary_ev  <- player_chances_vs_opp_ev %>% filter( metric=="blue", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), cf=sum(cf), ca=sum(ca), c_net=sum(c_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
 
-sc_green_summary_all <- player_chances_vs_opp_all %>% filter( metric=="green", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
-sc_blue_summary_all <- player_chances_vs_opp_all %>% filter( metric=="blue", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
+sc_green_summary_all <- player_chances_vs_opp_all %>% filter( metric=="green", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), cf=sum(cf), ca=sum(ca), c_net=sum(c_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
+sc_blue_summary_all <- player_chances_vs_opp_all %>% filter( metric=="blue", last_name=="NJD" ) %>% summarize( scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), cf=sum(cf), ca=sum(ca), c_net=sum(c_net), ff=sum(ff), fa=sum(fa), f_net=sum(f_net) )
 
 
 sc_green_summary_ev

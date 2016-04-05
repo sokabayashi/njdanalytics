@@ -115,7 +115,7 @@ group_roster_by_lines <- function( roster, toi_matrix, strength="ev5on5" ) {
   # individual total TOI
   roster$toi_ev5on5    <- diag( toi_matrix )
   roster$position_fd    <- ifelse( roster$position=="D", "D", "F" )
-  roster$rank_toi_ev5on5_adj <- NA
+  roster$rank_toi_ev5on5 <- roster$rank_toi_ev5on5_adj <- NA
 
   # this is for EV5on5.  But what happens if PK?
   # want to see units together: 1st unit 2F + 2D, 2nd unit 2F + 2D

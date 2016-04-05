@@ -8,7 +8,8 @@ create_heatmap_from_h2h(h2h, value_type = "toi", row_num_last_names,
   col_num_last_names, row_num_F_lines = 0, col_num_F_lines = 0,
   row_num_D_pairs = 0, col_num_D_pairs = 0, row_num_D = 0,
   col_num_D = 0, row_axis_title = "", col_axis_title = "",
-  chart_title = "", chart_filename = "tmp.png", width_to_height_ratio = 1)
+  chart_title = "", chart_filename = "tmp.png", width_to_height_ratio = 1,
+  tile.color.high = "#185AA9")
 }
 \arguments{
 \item{h2h}{Data frame of num_last_name_1, num_last_name_2 pairs with value}
@@ -38,6 +39,10 @@ create_heatmap_from_h2h(h2h, value_type = "toi", row_num_last_names,
 \item{chart_title}{String}
 
 \item{chart_filename}{String}
+
+\item{width_to_height_ratio}{Number, Default is 1}
+
+\item{tile.color.high}{Hex string. Default is blue "#185AA9".  A good green is "#008C48".}
 }
 \value{
 ggplot object
