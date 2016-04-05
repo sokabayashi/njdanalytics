@@ -37,7 +37,7 @@ knitr::opts_chunk$set(cache=FALSE, OutDec = ",")
 # player_name <- "Antoine Vermette"
 player_name <- "Nail Yakupov"
 player_name <- "Colin Wilson"
-player_name <- "Alexander Burmistrov"
+player_name <- "Lee Stempniak"
 ```
 
 # `r player_name`

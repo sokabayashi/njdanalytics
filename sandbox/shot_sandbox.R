@@ -106,23 +106,6 @@ shots_tbl <- shots_tbl %>% left_join( njd_games, by="game_number" )
 
 
 
-# useful functions --------------------------------------------------------
-
-left_join_scf_i <- function( shots_summary, shots_df_filter ) {
-  shots_grouped <- shots_df_filter %>% group_by( shooter_ha_number ) %>% summarise( scf_i=n() )
-  shots_team_ha <- shots_df_filter %>% group_by( event_team_ha )     %>% summarise( scf_i=n() ) %>% rename( shooter_ha_number=event_team_ha )
-
-  shots_grouped <- bind_rows( shots_grouped, shots_team_ha )
-
-  shots_summary %>% left_join( shots_grouped, by = c( "ha_number"="shooter_ha_number" ) )
-}
-
-tally_sc_by_ha_number <- function( shots_df_filter ) {
-  shots_summary <- tally_for_against_by_ha_number( shots_df_filter )
-  left_join_scf_i( shots_summary, shots_df_filter )
-}
-
-
 # Process single game shots data -------------------------------------------------------------
 
 min_game_number <- min( shots_tbl$game_number )
@@ -130,8 +113,8 @@ max_game_number <- max( shots_tbl$game_number )
 num_games <- max_game_number - min_game_number + 1
 # this_game_number <- 10 # only useful when debugging
 
-njd_player_chances <- vector( "list", num_games ) # Store all player results
-njd_pair_chances   <- vector( "list", num_games ) # Store all player-pair results
+player_chances <- vector( "list", num_games ) # Store all player results
+pair_chances   <- vector( "list", num_games ) # Store all player-pair results
 
 game_numbers <- shots_tbl$game_number %>% unique() %>% sort()
 # how many games?
@@ -152,8 +135,8 @@ for( this_game_number in game_numbers ) {
 
   # meta data for chart
   mandown_intervals_df <- get_mandown_intervals( shift_interval_df, game_info )
-  goals_df             <- get_goals_from_pbp( pbp_df, game_info )
-  game_info            <- supplement_game_info( game_info, our_team="NJD" )
+  goals_df             <- get_goals_from_pbp(    pbp_df, game_info )
+  game_info            <- supplement_game_info(  game_info, our_team="NJD" )
 
   # CHART
   # create_shotcolor_line_chart( shots_df, goals_df, mandown_intervals_df, game_info, shift_interval_df, ev5on5=F, shotcolor="ALL", include_blocked=T )
@@ -180,6 +163,8 @@ for( this_game_number in game_numbers ) {
 
   matched_shift_inteval_df   <- shift_interval_df[ shots_df$shift_interval_index, ]
   shots_df$on_ice_ha_numbers <- matched_shift_inteval_df$on_ice_ha_numbers
+  shots_df$home_goalie       <- matched_shift_inteval_df$home_goalie
+  shots_df$away_goalie       <- matched_shift_inteval_df$away_goalie
   shots_df$on_ice_ids        <- matched_shift_inteval_df$on_ice_ids
   shots_df$num_skaters_h     <- matched_shift_inteval_df$num_skaters_h
   shots_df$num_skaters_a     <- matched_shift_inteval_df$num_skaters_a
@@ -211,43 +196,44 @@ for( this_game_number in game_numbers ) {
   # tally up shots for each player ------------------------------------------
   # Corsi - All and EV
   # Fenwick - All and EV
-  corsi_all       <- tally_sc_by_ha_number( shots_df %>% filter() )
-  corsi_ev5on5    <- tally_sc_by_ha_number( shots_df %>% filter( strength=="EV 5v5") )
+  shots_df_ev5on5  <- shots_df        %>% filter( strength=="EV 5v5" )
+  ushots_df_ev5on5 <- shots_df_ev5on5 %>% filter( shot != "BLOCK" )
+  ushots_df        <- shots_df        %>% filter( shot != "BLOCK" )
 
-  goal_ev5on5     <- tally_sc_by_ha_number( shots_df %>% filter( shot == "GOAL", strength=="EV 5v5") )
-  goal_all        <- tally_sc_by_ha_number( shots_df %>% filter( shot == "GOAL") )
+  corsi_all       <- tally_sc_by_ha_number( shots_df        )
+  corsi_ev5on5    <- tally_sc_by_ha_number( shots_df_ev5on5 )
 
-  fenwick_all     <- tally_sc_by_ha_number( shots_df %>% filter( shot != "BLOCK") )
-  fenwick_ev5on5  <- tally_sc_by_ha_number( shots_df %>% filter( shot != "BLOCK", strength=="EV 5v5") )
+  goal_ev5on5     <- tally_sc_by_ha_number( shots_df_ev5on5 %>% filter( shot == "GOAL" ) )
+  goal_all        <- tally_sc_by_ha_number( shots_df        %>% filter( shot == "GOAL" ) )
+
+  fenwick_all     <- tally_sc_by_ha_number( ushots_df        )
+  fenwick_ev5on5  <- tally_sc_by_ha_number( ushots_df_ev5on5 )
 
   # UNBLOCKED Green and Blue shots
-  green_all       <- tally_sc_by_ha_number( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK") )
-  green_ev5on5    <- tally_sc_by_ha_number( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK", strength=="EV 5v5") )
-  green_pp        <- tally_sc_by_ha_number( shots_df %>% filter( shotcolor=="GREEN", shot != "BLOCK",
-                  grepl( "PP", strength ) ) )
+  green_all       <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="GREEN" ) )
+  green_ev5on5    <- tally_sc_by_ha_number( ushots_df_ev5on5 %>% filter( shotcolor=="GREEN" ) )
+  green_pp        <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="GREEN", grepl("PP", strength) ) )
 
-  blue_all        <- tally_sc_by_ha_number( shots_df %>% filter( shotcolor=="BLUE", shot != "BLOCK") )
-  blue_ev5on5     <- tally_sc_by_ha_number( shots_df %>% filter( shotcolor=="BLUE", shot != "BLOCK", strength=="EV 5v5") )
-  blue_pp         <- tally_sc_by_ha_number( shots_df %>% filter( shotcolor=="BLUE", shot != "BLOCK",
-    grepl( "PP", strength ) ) )
+  blue_all        <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="BLUE" ) )
+  blue_ev5on5     <- tally_sc_by_ha_number( ushots_df_ev5on5 %>% filter( shotcolor=="BLUE" ) )
+  blue_pp         <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="BLUE", grepl("PP", strength) ) )
 
-  greenblue_ev5on5    <- tally_sc_by_ha_number( shots_df %>%
-      filter( (shotcolor=="GREEN" | shotcolor=="BLUE"), shot != "BLOCK", strength=="EV 5v5") )
+  greenblue_ev5on5    <- tally_sc_by_ha_number( ushots_df_ev5on5 %>% filter( shotcolor=="GREEN" | shotcolor=="BLUE" ) )
 
-  greennomiss_ev5on5 <- tally_sc_by_ha_number( shots_df %>%
-      filter( shotcolor=="GREEN", shot != "MISS", shot != "BLOCK", strength=="EV 5v5") )
-
-  bluenomiss_ev5on5 <- tally_sc_by_ha_number( shots_df %>%
-      filter( shotcolor=="BLUE", shot != "MISS", shot != "BLOCK", strength=="EV 5v5") )
-
-  # NO MISS for GREEN or BLUE
-  greenblue_nomiss_ev5on5    <- tally_sc_by_ha_number( shots_df %>%
-      filter( (shotcolor=="GREEN" | shotcolor=="BLUE"), shot !="MISS", shot != "BLOCK", strength=="EV 5v5") )
-
-  # GREEN or (BLUE NO MISS)
-  green_bluenomiss_ev5on5    <- tally_sc_by_ha_number( shots_df %>%
-      filter( shot != "BLOCK", strength=="EV 5v5", (shotcolor=="GREEN" | (shotcolor=="BLUE" & shot!="MISS") ) ) )
-
+  # greennomiss_ev5on5 <- tally_sc_by_ha_number( shots_df %>%
+  #     filter( shotcolor=="GREEN", shot != "MISS", shot != "BLOCK", strength=="EV 5v5") )
+  #
+  # bluenomiss_ev5on5 <- tally_sc_by_ha_number( shots_df %>%
+  #     filter( shotcolor=="BLUE", shot != "MISS", shot != "BLOCK", strength=="EV 5v5") )
+  #
+  # # NO MISS for GREEN or BLUE
+  # greenblue_nomiss_ev5on5    <- tally_sc_by_ha_number( shots_df %>%
+  #     filter( (shotcolor=="GREEN" | shotcolor=="BLUE"), shot !="MISS", shot != "BLOCK", strength=="EV 5v5") )
+  #
+  # # GREEN or (BLUE NO MISS)
+  # green_bluenomiss_ev5on5    <- tally_sc_by_ha_number( shots_df %>%
+  #     filter( shot != "BLOCK", strength=="EV 5v5", (shotcolor=="GREEN" | (shotcolor=="BLUE" & shot!="MISS") ) ) )
+  #
 
   # prefix columns
   game_block <- cbind( "season"=this_season, "session_id"=this_session_id,
@@ -265,9 +251,9 @@ for( this_game_number in game_numbers ) {
     cbind( game_block, "metric"="blue",             "strength"="all",    blue_all,                stringsAsFactors=F ),
     cbind( game_block, "metric"="blue",             "strength"="ev5on5", blue_ev5on5,             stringsAsFactors=F ),
     cbind( game_block, "metric"="blue",             "strength"="pp",     blue_pp,                 stringsAsFactors=F ),
-    cbind( game_block, "metric"="greenblue",        "strength"="ev5on5", greenblue_ev5on5,        stringsAsFactors=F ),
+    cbind( game_block, "metric"="greenblue",        "strength"="ev5on5", greenblue_ev5on5,        stringsAsFactors=F )
     # cbind( game_block, "metric"="greennomiss",      "strength"="ev5on5", greennomiss_ev5on5,      stringsAsFactors=F ),
-    cbind( game_block, "metric"="bluenomiss",       "strength"="ev5on5", bluenomiss_ev5on5,       stringsAsFactors=F )
+    # cbind( game_block, "metric"="bluenomiss",       "strength"="ev5on5", bluenomiss_ev5on5,       stringsAsFactors=F )
     # cbind( game_block, "metric"="greenblue_nomiss", "strength"="ev5on5", greenblue_nomiss_ev5on5, stringsAsFactors=F ),
     # cbind( game_block, "metric"="green_bluenomiss", "strength"="ev5on5", green_bluenomiss_ev5on5, stringsAsFactors=F )
   )
@@ -278,12 +264,10 @@ for( this_game_number in game_numbers ) {
 
   # Join the players by ha_number
   njd_chances    <- njd_chances %>% left_join( this_roster %>% select( ha_number, nhl_id, last_name, team_short ), by="ha_number" )
-  # ha_number is H or A
-  game_info$their_ha <- ifelse( game_info$our_ha=="H", "A", "H" )
-  njd_chances$nhl_id[     njd_chances$ha_number==game_info$our_ha ] <- 1
-  njd_chances$last_name[  njd_chances$ha_number==game_info$our_ha ] <- "NJD"
-  njd_chances$team_short[ njd_chances$ha_number==game_info$our_ha ] <- "NJD"
 
+  njd_chances$nhl_id[     njd_chances$ha_number==game_info$our_ha ]   <- 1
+  njd_chances$last_name[  njd_chances$ha_number==game_info$our_ha ]   <- "NJD"
+  njd_chances$team_short[ njd_chances$ha_number==game_info$our_ha ]   <- "NJD"
   njd_chances$last_name[  njd_chances$ha_number==game_info$their_ha ] <- game_info$their_team
   njd_chances$team_short[ njd_chances$ha_number==game_info$their_ha ] <- game_info$their_team
 
@@ -302,47 +286,40 @@ for( this_game_number in game_numbers ) {
   # Pairwise shot data ------------------------------------------------------
   # shots_df
   # roster
+  # Do this with ha_number rather than nhl_id level.  no reason, just easier to look at.  Join nhl_id later.
+  # EV only since we're really concerned about matchup h2h.
+  corsi_ev_pairs     <- tally_sc_by_ha_number_pairs( shots_df_ev5on5,
+                                                     this_roster, game_info$our_ha, game_info$their_ha )
+  fenwick_ev_pairs   <- tally_sc_by_ha_number_pairs( ushots_df_ev5on5,
+                                                     this_roster, game_info$our_ha, game_info$their_ha )
+  goal_ev_pairs      <- tally_sc_by_ha_number_pairs( ushots_df_ev5on5 %>% filter( shot == "GOAL" ),
+                                                     this_roster, game_info$our_ha, game_info$their_ha )
+  green_ev_pairs     <- tally_sc_by_ha_number_pairs( ushots_df_ev5on5 %>% filter( shotcolor == "GREEN" ),
+                                                     this_roster, game_info$our_ha, game_info$their_ha )
+  blue_ev_pairs      <- tally_sc_by_ha_number_pairs( ushots_df_ev5on5 %>% filter( shotcolor == "BLUE" ),
+                                                     this_roster, game_info$our_ha, game_info$their_ha )
+  greenblue_ev_pairs <- tally_sc_by_ha_number_pairs( ushots_df_ev5on5 %>% filter( shotcolor == "GREEN" | shotcolor == "BLUE" ),
+                                                     this_roster, game_info$our_ha, game_info$their_ha )
+  pair_chances_game <- rbind(
+    cbind( game_block, "metric"="corsi",     "strength"="ev5on5", corsi_ev_pairs,       stringsAsFactors=F ),
+    cbind( game_block, "metric"="fenwick",   "strength"="ev5on5", fenwick_ev_pairs,     stringsAsFactors=F ),
+    cbind( game_block, "metric"="goal",      "strength"="ev5on5", goal_ev_pairs,        stringsAsFactors=F ),
+    cbind( game_block, "metric"="green",     "strength"="ev5on5", green_ev_pairs,       stringsAsFactors=F ),
+    cbind( game_block, "metric"="blue",      "strength"="ev5on5", blue_ev_pairs,        stringsAsFactors=F ),
+    cbind( game_block, "metric"="greenblue", "strength"="ev5on5", greenblue_ev_pairs,   stringsAsFactors=F )
+  ) %>% as_data_frame()
 
-  goalies <- this_roster %>% filter( position=="G" ) %>% select( ha_number ) %>% unlist()
-  goalies_or <- paste(goalies, collapse="|")
-  ha_numbers <- this_roster %>% filter( position!="G" ) %>% select( ha_number ) %>%
-                              unlist(use.names = F) %>% sort()
-
-  # focus just on one team and remove goalies.  Sort ha_numbers in alphabetical order
-  shots_df <- shots_df %>% mutate(
-      ha_numbers_list = on_ice_ha_numbers %>% gsub( goalies_or, "", . ) %>%
-                                        str_extract_all( "(\\w+)" ) %>%
-                                        llply( sort ),
-      pair            = ha_numbers_list %>% laply( get_pairs_of_ha_numbers ),
-      unblocked       =shot != "BLOCK"
+  pair_chances_game <- pair_chances_game %>% left_join(
+    this_roster %>%
+      select( ha_number_1=ha_number, nhl_id_1=nhl_id, last_name_1=last_name, team_short_1=team_short ),
+              by="ha_number_1" ) %>% left_join(
+    this_roster %>%
+      select( ha_number_2=ha_number, nhl_id_2=nhl_id, last_name_2=last_name, team_short_2=team_short ),
+              by="ha_number_2" ) %>% mutate(
+      sc_net = scf - sca
   )
 
-  shots_pairs_unnested <- shots_df %>% filter( unblocked ) %>% select( shotcolor, event_team_ha, pair ) %>% unnest()
-  shots_pairs_table <- shots_pairs_unnested %>% group_by( pair, shotcolor ) %>% summarise(
-    A = sum(event_team_ha=="A"),
-    H = sum(event_team_ha=="H")
-  )
-
-# check
-# shots_df %>% filter( event_team_ha=="A", grepl( "A02", on_ice_ha_numbers ), grepl( "A14", on_ice_ha_numbers ) ) %>%
-#       select( clock, event_team_ha, on_ice_ha_numbers )
-  shots_pairs_table <- shots_pairs_table %>% ungroup() %>% separate( pair, c("ha_number_1", "ha_number_2" ) )
-
-  # ALL from OUR perspective, even if home
-  shots_pairs_table_colnames <- names( shots_pairs_table )
-  our_sf_col   <- shots_pairs_table_colnames==game_info$our_ha
-  their_sf_col <- shots_pairs_table_colnames==game_info$their_ha
-  shots_pairs_table_colnames[ our_sf_col   ] <- "sf" # SF NJD
-  shots_pairs_table_colnames[ their_sf_col ] <- "sa" # SA NJD
-  names( shots_pairs_table ) <- shots_pairs_table_colnames
-
-
-
-  njd_chances_pairs <- shots_pairs_table %>% left_join(
-    this_roster %>% select( ha_number_1=ha_number, nhl_id_1=nhl_id ), by="ha_number_1"
-  ) %>% left_join(
-    this_roster %>% select( ha_number_2=ha_number, nhl_id_2=nhl_id ), by="ha_number_2"
-  )
+  pair_chances[[this_game_number]] <- pair_chances_game
 
   # official NHL shot data by player for this game  -----------------------------------------------------
 
@@ -366,48 +343,65 @@ for( this_game_number in game_numbers ) {
                                                     f_total = ff+fa
                                                   )
 
-  # team level - Attach shot data to team_score ------------------------------------------
+  # # team level - Attach shot data to team_score ------------------------------------------
+  # # corsi
+  # njd_game_team$c_total_video[
+  #   njd_game_team$game_number==this_game_number & njd_game_team$strength=="all"
+  #   ] <- njd_team_chances %>% filter(metric=="corsi", strength=="all") %>% select( sc_total ) %>% unlist()
+  # njd_game_team$c_total_video[
+  #   njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
+  #   ] <- njd_team_chances %>% filter(metric=="corsi", strength=="ev5on5") %>% select( sc_total ) %>% unlist()
+  # njd_game_team$cf_pct_video[
+  #   njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
+  #   ] <- njd_team_chances %>% filter(metric=="corsi", strength=="ev5on5") %>% select( scf_pct ) %>% unlist()
+  #
+  # # fenwick
+  # njd_game_team$f_total_video[
+  #   njd_game_team$game_number==this_game_number & njd_game_team$strength=="all"
+  #   ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="all") %>% select( sc_total ) %>% unlist()
+  # njd_game_team$f_total_video[
+  #   njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
+  #   ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="ev5on5") %>% select( sc_total ) %>% unlist()
+  # njd_game_team$ff_pct_video[
+  #   njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
+  #   ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="ev5on5") %>% select( scf_pct ) %>% unlist()
+  #
 
-  # corsi
-  njd_game_team$c_total_video[
-    njd_game_team$game_number==this_game_number & njd_game_team$strength=="all"
-    ] <- njd_team_chances %>% filter(metric=="corsi", strength=="all") %>% select( sc_total ) %>% unlist()
-  njd_game_team$c_total_video[
-    njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
-    ] <- njd_team_chances %>% filter(metric=="corsi", strength=="ev5on5") %>% select( sc_total ) %>% unlist()
-  njd_game_team$cf_pct_video[
-    njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
-    ] <- njd_team_chances %>% filter(metric=="corsi", strength=="ev5on5") %>% select( scf_pct ) %>% unlist()
 
-  # fenwick
-  njd_game_team$f_total_video[
-    njd_game_team$game_number==this_game_number & njd_game_team$strength=="all"
-    ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="all") %>% select( sc_total ) %>% unlist()
-  njd_game_team$f_total_video[
-    njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
-    ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="ev5on5") %>% select( sc_total ) %>% unlist()
-  njd_game_team$ff_pct_video[
-    njd_game_team$game_number==this_game_number & njd_game_team$strength=="ev5on5"
-    ] <- njd_team_chances %>% filter(metric=="fenwick", strength=="ev5on5") %>% select( scf_pct ) %>% unlist()
 
+# join game_player --------------------------------------------------------
 
 
   njd_chances_toi    <- njd_chances %>% left_join( this_game_player %>%
-      filter( filter_score_diff=="all" ) %>%
-      select( strength=filter_strength, nhl_id, toi, cf, ca, c_net, ff, fa, f_net ),
+                                        filter( filter_score_diff=="all" ) %>%
+                                        select( strength=filter_strength, nhl_id, toi, cf, ca, c_net, ff, fa, f_net ),
                                 by=c("strength", "nhl_id") )
 
     # ha_number, nhl_id, last_name, team_short
-  njd_player_chances[[this_game_number]] <- njd_chances_toi
+  player_chances[[this_game_number]] <- njd_chances_toi
 
 } # for loop through games
 
-njd_player_chances_df <- do.call("rbind", njd_player_chances )
+player_chances_df <- do.call("rbind", player_chances )
+pair_chances_df   <- do.call("rbind", pair_chances )
 
-njd_players_by_game   <- njd_player_chances_df %>% filter( team_short=="NJD" ) %>%
+njd_players_by_game   <- player_chances_df %>% filter( team_short=="NJD" ) %>%
                           left_join( player_tbl %>% select( nhl_id, position_fd, number ), by="nhl_id" )
-save( njd_player_chances_df, njd_players_by_game, file=paste0( nhl_dir$shot, "/njd_through_58.RData" ))
-load( file=paste0( nhl_dir$shot, "/njd_through_58.RData" ))
+
+shots_tbl$event_team <- ifelse( shots_tbl$event_team=="TB", "TBL", shots_tbl$event_team )
+save( njd_games, shots_tbl, player_chances_df, njd_players_by_game, pair_chances_df,
+      file=paste0( nhl_dir$shot, "/njd_through_", this_game_number, ".RData" ) )
+load( file=paste0( nhl_dir$shot, "/njd_through_", this_game_number, ".RData" ))
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -568,21 +562,21 @@ print( nhl_fewnick_ev5on5_undercount )
 
 # vs a specific team ------------------------------------------------------
 
-opponent <- "PHI"
+opponent <- "MIN"
 games_vs_opp <- njd_games %>% filter( opp_team_short==opponent )
 
 this_game_number <- games_vs_opp$game_number
+player_chances_vs_opp <- player_chances_df %>% filter( game_number %in% games_vs_opp$game_number )
 
 # or perhaps we know the exact game number
-this_game_number <- c( 54)
-player_chances_vs_opp <- njd_player_chances_df %>% filter( game_number %in% games_vs_opp$game_number )
+# this_game_number <- c( 67)
 
 # or perhaps we want season to date NJD only
 # player_chances_vs_opp <- njd_player_chances_df %>% filter( team_short=="NJD" )
 
 this_game_id4 <- shots_tbl %>% filter( game_number %in% this_game_number ) %>%
   select( game_id4 ) %>% unlist(use.names = F) %>% unique()
-player_chances_vs_opp <- njd_player_chances_df %>% filter( game_number %in% c( this_game_number) )
+player_chances_vs_opp <- player_chances_df %>% filter( game_number %in% c( this_game_number) )
 
 
 # data for one game only
@@ -766,17 +760,19 @@ names(player_stats_brief) <- brief_col_names
 
 # write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/NJD_through_gm50.csv") )
 
-write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/gm54_NYR.csv") )
+write_csv( player_stats_brief, path=paste0(nhl_dir$shot, "/opponent/gm43_MIN.csv") )
 
-player_green_pp %>% filter( last_name=="NJD" )
+player_green_pp %>% filter( last_name =="NJD" )
 
 player_chances_vs_opp_ev %>% filter( metric=="corsi", last_name=="NJD" )
 player_chances_vs_opp_ev %>% filter( metric=="fenwick", last_name=="NJD" )
-player_chances_vs_opp_all %>% filter( metric=="green", last_name=="NJD" )
-player_chances_vs_opp_all %>% filter( metric=="blue", last_name=="NJD" )
 
 player_chances_vs_opp_ev %>% filter( metric=="green", last_name=="NJD" )
 player_chances_vs_opp_ev %>% filter( metric=="blue", last_name=="NJD" )
+
+player_chances_vs_opp_all %>% filter( metric=="green", last_name=="NJD" )
+player_chances_vs_opp_all %>% filter( metric=="blue", last_name=="NJD" )
+
 
 
 

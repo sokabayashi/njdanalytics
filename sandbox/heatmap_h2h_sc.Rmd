@@ -19,12 +19,13 @@ team_score           <- tbl( nhl_db, "team_score"       )
 stage_game           <- tbl( nhl_db, "stage_game"       )
 stage_roster         <- tbl( nhl_db, "stage_roster"     )
 stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay" )
+team_tbl             <- tbl( nhl_db, "team"             ) %>% collect()
 
 this_season     <- "20152016"
 this_session_id <- "2"
 
 # MANUALLY UPDATE
-game_suffix <- 68
+game_suffix <- 73
 
 # njd_games has game_number and game_id4 to join different data sources
 our_team_short <- "NJD" # might change perspective for games we're not in?
@@ -43,10 +44,12 @@ load( file=paste0( nhl_dir$shot, "/njd_through_", game_suffix, ".RData" ))
 ```{r opp data}
 
 
-this_opp_team_short <- "WSH"
+this_opp_team_short <- "CBJ"
 
 opp_team_short_lower <- this_opp_team_short %>% str_to_lower()
 vs_opp_games         <- our_games %>% filter( opp_team_short==this_opp_team_short )
+our_team_common      <- team_tbl %>% filter( name_short==our_team_short      ) %>% select( name_common ) %>% unlist( use.names = F )
+opp_team_common      <- team_tbl %>% filter( name_short==this_opp_team_short ) %>% select( name_common ) %>% unlist( use.names = F )
 
 # drop any games as needed
 # vs_opp_games        <- vs_opp_games %>% slice(-1)
@@ -64,6 +67,7 @@ vs_opp_pbp          <- stage_playbyplay %>%
 vs_opp_pair_chances <- pair_chances_df %>% filter( game_number %in% vs_opp_game_numbers ) %>% select( -starts_with( "ha_number" ))
 sc_h2h_ev_gm       <- vs_opp_pair_chances %>% filter( strength=="ev5on5" )
 
+vs_opp_games
 ```
 
 ```{r augment data}
@@ -83,6 +87,14 @@ num_centers <- 4
 #################################
 
 vs_opp_rosters_C      <- augment_rosters_C( vs_opp_rosters, vs_opp_pbp, player_tbl, center_fo_cutoff = num_centers  )
+# override C
+vs_opp_rosters_C$is_center[ vs_opp_rosters_C$team_short=="CAR"] <- FALSE
+vs_opp_rosters_C$is_center[ vs_opp_rosters_C$num_last_name=="11 STAAL"     ] <- TRUE
+vs_opp_rosters_C$is_center[ vs_opp_rosters_C$num_last_name=="49 RASK"      ] <- TRUE
+vs_opp_rosters_C$is_center[ vs_opp_rosters_C$num_last_name=="18 MCCLEMENT" ] <- TRUE
+vs_opp_rosters_C$is_center[ vs_opp_rosters_C$num_last_name=="33 RYAN"      ] <- TRUE
+
+
 vs_opp_rosters_group  <- group_multigame_rosters_by_lines( vs_opp_rosters_C, toi_h2h_ev_gm )
 
 # Aggregate by pairs (p1, p2) across games
@@ -110,49 +122,27 @@ h2h_ev[ is.na(h2h_ev) ] <- 0
 ```
 
 
-```{r h2h toi all}
+```{r line adjustments}
 
 row_num_last_names <- vs_opp_rosters_group %>% filter( team_short==our_team_short,      position_fd != "G" ) %>% 
                                             select( num_last_name ) %>% unlist(use.names = F)
 col_num_last_names <- vs_opp_rosters_group %>% filter( team_short==this_opp_team_short, position_fd != "G" ) %>% 
                                             select( num_last_name ) %>% unlist(use.names = F)
 
-custom_opp_1st_line <- c( "92 KUZNETSOV", "8 OVECHKIN", "14 WILLIAMS" )
-opp_num_last_names  <- c( custom_opp_1st_line, col_num_last_names[!col_num_last_names %in% custom_opp_1st_line])
-col_num_last_names  <- opp_num_last_names
+# custom_opp_1st_line <- c( "92 KUZNETSOV", "8 OVECHKIN", "14 WILLIAMS" )
+# opp_num_last_names  <- c( custom_opp_1st_line, col_num_last_names[!col_num_last_names %in% custom_opp_1st_line])
+# col_num_last_names  <- opp_num_last_names
 
-gtitle <- paste0( "EV5on5 TOI" )
-fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_TOI.png" )
-create_heatmap_from_h2h( h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short ),
-                          value_type="toi", 
-                          row_num_last_names, col_num_last_names,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
-                          chart_filename=fname )
-
-gtitle <- paste0( "EV5on5 Green Chance Differential" )
-fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_green.png" )
-create_heatmap_from_h2h( h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short ),
-                          value_type="green_net", 
-                          row_num_last_names, col_num_last_names,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
-                          chart_filename=fname )
 ```
 
 
-
-```{r centers}
-# nhl_id_1 = our players, nhl_id_2 = their players
-# toi_h2h_C <- toi_h2h_ev %>% filter( is_center_1, is_center_2, team_short_1==our_team_short, team_short_2==this_opp_team_short )
-
-h2h_ev_matchup  <- h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short )
-
+```{r data C only}
 h2h_ev_C  <- h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short,
                           is_center_1, is_center_2)
 us_ev_C   <- h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==our_team_short,
                           is_center_1, is_center_2)
 them_ev_C <- h2h_ev %>% filter( team_short_1==this_opp_team_short, team_short_2==this_opp_team_short,
                           is_center_1, is_center_2)
-
 
 row_num_last_names_C <- vs_opp_rosters_group %>% filter( team_short==our_team_short, is_center ) %>% 
                                             select( num_last_name ) %>% unlist(use.names = F)
@@ -161,7 +151,7 @@ col_num_last_names_C <- vs_opp_rosters_group %>% filter( team_short==this_opp_te
 col_num_last_names_C <- opp_num_last_names[ opp_num_last_names %in% col_num_last_names_C ]
 ```
 
-```{r our D their F}
+```{r data our D their F}
 our_D_their_F <- h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short,
                                     position_fd_1=="D", position_fd_2=="F" )
 
@@ -169,113 +159,182 @@ row_num_last_names_D <- vs_opp_rosters_group %>% filter( team_short==our_team_sh
                                             select( num_last_name ) %>% unlist(use.names = F)
 col_num_last_names_F <- vs_opp_rosters_group %>% filter( team_short==this_opp_team_short,  position_fd=="F" ) %>% 
                                             select( num_last_name ) %>% unlist(use.names = F)
-col_num_last_names_F <- opp_num_last_names[ opp_num_last_names %in% col_num_last_names_F ]
+
+# custom order
+# col_num_last_names_F <- opp_num_last_names[ opp_num_last_names %in% col_num_last_names_F ]
+
+this_row_num_D <- length( row_num_last_names_D )
+this_row_num_F <- length( row_num_last_names ) - this_row_num_D
+this_col_num_F <- length( col_num_last_names_F )
+this_col_num_D <- length( col_num_last_names ) - this_col_num_F
+this_row_num_D_pairs <- this_row_num_D %/% 2
+this_col_num_D_pairs <- this_col_num_D %/% 2
+this_row_num_F_lines <- this_row_num_F %/% 3
+this_col_num_F_lines <- this_col_num_F %/% 3
+
+# override
+this_row_num_F_lines <- 4
+this_col_num_F_lines <- 4
+this_row_num_D_pairs <- 3
+this_col_num_D_pairs <- 3
 ```
 
-```{r our F their F}
+```{r data our F their F}
 our_F_their_F <- h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short,
                                     position_fd_1=="F", position_fd_2=="F" )
+
+our_C_their_F <- h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short,
+                                    is_center_1, position_fd_1=="F", position_fd_2=="F" )
 
 row_num_last_names_F <- vs_opp_rosters_group %>% filter( team_short==our_team_short, position_fd=="F" ) %>% 
                                             select( num_last_name ) %>% unlist(use.names = F)
 ```
 
-```{r our F their F}
+```{r data our D only}
 our_D <-  h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==our_team_short,
                                     position_fd_1=="D", position_fd_2=="D" )
 ```
 
 
-```{r h2h C}
+```{r chart all players}
+
 gtitle <- paste0( "EV5on5 TOI" )
-fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_centers_TOI.png" )
-
-create_heatmap_from_h2h( h2h_ev_C, value_type="toi", row_num_last_names_C, col_num_last_names_C,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_TOI.png" )
+create_heatmap_from_h2h( h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short ),
+                          value_type="toi", 
+                          row_num_last_names, col_num_last_names,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=this_col_num_D_pairs,
+                          row_num_D=this_row_num_D, col_num_D=this_col_num_D,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname )
 
-gtitle <- paste0( "EV5on5 Green Chances" )
-fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_centers_green.png" )
-
-create_heatmap_from_h2h( h2h_ev_C, value_type="green_net", row_num_last_names_C, col_num_last_names_C,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
-                          chart_filename=fname )
-
-gtitle <- paste0( "EV5on5 Blue Chances" )
-fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_centers_blue.png" )
-
-create_heatmap_from_h2h( h2h_ev_C, value_type="blue_net", row_num_last_names_C, col_num_last_names_C,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+gtitle <- paste0( "EV5on5 Green Chance Differential" )
+fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_green.png" )
+create_heatmap_from_h2h( h2h_ev %>% filter( team_short_1==our_team_short, team_short_2==this_opp_team_short ),
+                          value_type="green_net", 
+                          row_num_last_names, col_num_last_names,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=this_col_num_D_pairs,
+                          row_num_D=this_row_num_D, col_num_D=this_col_num_D,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname )
 ```
 
 
-```{r h2h our D}
-gtitle <- paste0( "EV5on5 TOI" )
+```{r chart our D only}
+# NJD ONLY
+gtitle <- paste0( "EV5on5 TOI Devils D Pairings" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_D_TOI.png" )
-
 create_heatmap_from_h2h( our_D, value_type="toi", row_num_last_names_D, row_num_last_names_D,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
-                          chart_filename=fname, width_to_height_ratio = 2 )
+                          row_num_F_lines=0, col_num_F_lines=0,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=this_row_num_D_pairs,
+                          row_num_D=this_row_num_D, col_num_D=this_row_num_D,
+                          row_axis_title = "", col_axis_title = "", chart_title = gtitle,
+                          chart_filename=fname )
 
-gtitle <- paste0( "EV5on5 Green Chances" )
+gtitle <- paste0( "EV5on5 Green Chances Devils D Pairings" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_D_green.png" )
-
-create_heatmap_from_h2h( our_D_their_F, value_type="green_net", row_num_last_names_D, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
-                          chart_filename=fname, width_to_height_ratio = 2 )
-
-gtitle <- paste0( "EV5on5 Blue Chances" )
-fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_D_blue.png" )
-
-create_heatmap_from_h2h( our_D_their_F, value_type="blue_net", row_num_last_names_D, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
-                          chart_filename=fname, width_to_height_ratio = 2 )
+create_heatmap_from_h2h( our_D, value_type="green_net", row_num_last_names_D, row_num_last_names_D,
+                          row_num_F_lines=0, col_num_F_lines=0,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=this_row_num_D_pairs,
+                          row_num_D=this_row_num_D, col_num_D=this_row_num_D,
+                          row_axis_title = "", col_axis_title = "", chart_title = gtitle,
+                          chart_filename=fname )
 ```
 
+```{r chart our D their F}
 
-```{r h2h our D their F}
-gtitle <- paste0( "EV5on5 TOI" )
+gtitle <- paste0( "EV5on5 H2H TOI" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_D_vs_F_TOI.png" )
 
 create_heatmap_from_h2h( our_D_their_F, value_type="toi", row_num_last_names_D, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+                          row_num_F_lines=0, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=0,
+                          row_num_D=this_row_num_D, col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname, width_to_height_ratio = 2 )
 
-gtitle <- paste0( "EV5on5 Green Chances" )
+gtitle <- paste0( "EV5on5 H2H Green Chances" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_D_vs_F_green.png" )
 
 create_heatmap_from_h2h( our_D_their_F, value_type="green_net", row_num_last_names_D, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+                          row_num_F_lines=0, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=0,
+                          row_num_D=this_row_num_D, col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname, width_to_height_ratio = 2 )
 
-gtitle <- paste0( "EV5on5 Blue Chances" )
+gtitle <- paste0( "EV5on5 H2H Blue Chances" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_D_vs_F_blue.png" )
 
 create_heatmap_from_h2h( our_D_their_F, value_type="blue_net", row_num_last_names_D, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+                          row_num_F_lines=0, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=this_row_num_D_pairs, col_num_D_pairs=0,
+                          row_num_D=this_row_num_D, col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname, width_to_height_ratio = 2 )
 ```
 
 ```{r h2h our F their F}
-gtitle <- paste0( "EV5on5 TOI" )
+gtitle <- paste0( "EV5on5 H2H TOI" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_F_TOI.png" )
 
 create_heatmap_from_h2h( our_F_their_F, value_type="toi", row_num_last_names_F, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=0,                    col_num_D_pairs=0,
+                          row_num_D=0,                          col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname )
 
-gtitle <- paste0( "EV5on5 Green Chances" )
+gtitle <- paste0( "EV5on5 H2H Green Chances" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_F_green.png" )
 
 create_heatmap_from_h2h( our_F_their_F, value_type="green_net", row_num_last_names_F, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=0,                    col_num_D_pairs=0,
+                          row_num_D=0,                          col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname )
 
-gtitle <- paste0( "EV5on5 Blue Chances" )
+gtitle <- paste0( "EV5on5 H2H Blue Chances" )
 fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_F_blue.png" )
 
 create_heatmap_from_h2h( our_F_their_F, value_type="blue_net", row_num_last_names_F, col_num_last_names_F,
-                          row_axis_title = our_team_short, col_axis_title = this_opp_team_short, chart_title = gtitle,
+                          row_num_F_lines=this_row_num_F_lines, col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=0,                    col_num_D_pairs=0,
+                          row_num_D=0,                          col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
                           chart_filename=fname )
+
+```
+
+```{r h2h our C their F}
+gtitle <- paste0( "EV5on5 H2H TOI" )
+fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_C_vs_F_TOI.png" )
+create_heatmap_from_h2h( our_C_their_F, value_type="toi", row_num_last_names_C, col_num_last_names_F,
+                          row_num_F_lines=0,                    col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=0,                    col_num_D_pairs=0,
+                          row_num_D=0,                          col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
+                          chart_filename=fname, width_to_height_ratio = 2 )
+
+gtitle <- paste0( "EV5on5 H2H Green Chances" )
+fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_C_vs_F_green.png" )
+create_heatmap_from_h2h( our_C_their_F, value_type="green_net", row_num_last_names_C, col_num_last_names_F,
+                          row_num_F_lines=0,                    col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=0,                    col_num_D_pairs=0,
+                          row_num_D=0,                          col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
+                          chart_filename=fname, width_to_height_ratio = 2 )
+
+gtitle <- paste0( "EV5on5 H2H Blue Chances" )
+fname <-  paste0( "sandbox/njd-", opp_team_short_lower, "_our_C_vs_F_blue.png" )
+create_heatmap_from_h2h( our_C_their_F, value_type="blue_net", row_num_last_names_C, col_num_last_names_F,
+                          row_num_F_lines=0,                    col_num_F_lines=this_col_num_F_lines,
+                          row_num_D_pairs=0,                    col_num_D_pairs=0,
+                          row_num_D=0,                          col_num_D=0,
+                          row_axis_title = our_team_common, col_axis_title = opp_team_common, chart_title = gtitle,
+                          chart_filename=fname, width_to_height_ratio = 2 )
+
 ```

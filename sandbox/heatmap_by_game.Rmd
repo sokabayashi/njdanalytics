@@ -221,10 +221,3 @@ grid.newpage()
 grid.draw(foo)
 ```
 
-
-```{r chart em}
-foo <- rbind_plots( list(p.this_player_toi_top, p.this_player_toi, p.linemates), c(1.5,1.5,8))
-
-grid.newpage()
-grid.draw(foo)
-```
