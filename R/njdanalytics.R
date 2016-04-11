@@ -7,7 +7,8 @@
 "_PACKAGE"
 
 .onAttach <- function( libname, pkgname ) {
-  # packageStartupMessage( "" )
+  packageStartupMessage( "NJD Analytics package" )
+
   base_dir     <- "/media/driveb/projects/nhl"
   vault_dir    <- paste0( base_dir, "/Vault" )
   r_dir        <- paste0( vault_dir, "/R" )
