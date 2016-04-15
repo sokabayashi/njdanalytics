@@ -1,0 +1,136 @@
+---
+title: "2015-2016 NJD Forwards and Defensemen vs League"
+geometry: margin=1cm
+output: html_document
+fontsize: 10pt
+---
+
+```{r Setup knitr, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec = ",")
+```
+
+```{r Load db and RData, include=F}
+library( njdanalytics )
+
+nhl_db <- setup_nhl_db()
+player_tbl           <- tbl( nhl_db, "player"           ) %>% collect()
+team_score           <- tbl( nhl_db, "team_score"       )
+stage_game           <- tbl( nhl_db, "stage_game"       )
+stage_roster         <- tbl( nhl_db, "stage_roster"     )
+stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay" )
+game_player          <- tbl( nhl_db, "game_player"      )
+team_tbl             <- tbl( nhl_db, "team"             ) %>% collect()
+
+this_session_id <- "2" 
+# fig directory
+fig_dir <- paste0( "" )
+
+# Seasons to include in analysis
+season_end_study <- 2014:2016
+seasons <- paste0( season_end_study-1, season_end_study )
+this_season <- seasons %>% last()
+
+```
+
+```{r find playoff teams}
+standings <- data_frame()
+for( this_season in seasons ) {
+  season_end     <- substr( this_season, 5, 8 )
+  this_standings <- get_season_standings( this_season, team_tbl )
+  this_standings <- cbind( season_end, this_standings )
+  standings <- rbind( standings, this_standings )
+}
+standings <- standings %>% mutate(
+                  team_season = paste0( team_short, " ", season_end )
+)
+```
+
+
+```{r team_season}
+# aggregate game_player by team_season
+
+# for each team season
+# aggregate player stats
+
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+#########################################################################
+# MANUALLY UPDATE
+game_suffix <- 75
+this_opp_team_short <- "TOR"
+#########################################################################
+
+# njd_games has game_number and game_id4 to join different data sources
+our_team_short <- "NJD" # might change perspective for games we're not in?
+our_games            <- team_score %>% 
+                          filter( season==this_season, session_id==this_session_id, team_short==our_team_short) %>%
+                          collect() %>% arrange( game_date )
+our_games            <- add_team_score_label( our_games, our_team=our_team_short ) %>%
+                          select( game_date, game_number, season, session_id, game_id4, ha, opp_team_short, game_label )
+our_game_id4s        <- our_games$game_id4
+
+# njd_games, shots_tbl, player_chances_df, njd_players_by_game, pair_chances_df
+load( file=paste0( nhl_dir$shot, "/njd_through_", game_suffix, ".RData" ))
+
+njd_green <- njd_players_by_game %>% filter( metric=="green", strength=="ev5on5", team_short=="NJD", game_number > 20 ) %>% 
+                  group_by( last_name, position_fd ) %>% summarize( gm=n(), toi=sum(toi), toi_gm=toi/gm, 
+                    scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net), sc_net_60=sc_net/toi )
+
+njd_greenblue <- njd_players_by_game %>% filter( metric=="greenblue", strength=="ev5on5", team_short=="NJD", game_number  ) %>% 
+                  group_by( last_name, position_fd ) %>% summarize( gm=n(), toi=sum(toi), toi_gm=toi/gm, 
+                    scf=sum(scf), sca=sum(sca), sc_net=sum(sc_net) )
+
+greene_green     <-  njd_players_by_game %>% filter( metric=="green", strength=="ev5on5", team_short=="NJD", last_name=="GREENE" )
+
+henrique_green     <-  njd_players_by_game %>% filter( metric=="green", strength=="ev5on5", team_short=="NJD", last_name=="HENRIQUE" )
+henrique_green %>% complete( game_number, fill=list(sc_net=0 ) )
+
+# henrique_greenblue <-  njd_players_by_game %>% filter( metric=="greenblue", strength=="ev5on5", team_short=="NJD", last_name=="HENRIQUE" )
+# 
+# henrique_green <- henrique_green %>% mutate( pos_neg = sign(sc_net) )
+# henrique_greenblue  <- henrique_greenblue %>% mutate( pos_neg = sign(sc_net) )
+# 
+ g.foo <- ggplot( henrique_green, aes(x=game_number,y=sc_net) )
+ g.foo + geom_point( ) + geom_smooth() +geom_hline(yintercept=0)
+# 
+# g.foo <- ggplot( henrique_greenblue, aes(x=game_number,y=sc_net) )
+# g.foo + geom_point( ) + geom_smooth() +geom_hline(yintercept=0)
+# 
+# g.foo <- ggplot( henrique_green, aes(x=game_number,y=pos_neg) )
+# g.foo + geom_point( ) + geom_smooth() +geom_hline(yintercept=0)
+# 
+# g.foo <- ggplot( henrique_greenblue, aes(x=game_number,y=pos_neg) )
+# g.foo + geom_point( ) + geom_smooth() +geom_hline(yintercept=0)
+
+```
