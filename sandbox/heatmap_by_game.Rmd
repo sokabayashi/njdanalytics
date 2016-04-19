@@ -23,12 +23,16 @@ player_tbl           <- tbl( nhl_db, "player"               ) %>% collect()
 # stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay"     )
 # stage_shift_interval <- tbl( nhl_db, "stage_shift_interval" )
 team_score           <- tbl( nhl_db, "team_score"           )
-# game_player          <- tbl( nhl_db, "game_player"          )
+game_player          <- tbl( nhl_db, "game_player"          ) %>% filter( filter_score_diff=="all", filter_period=="all")
 game_h2h             <- tbl( nhl_db, "game_h2h"             )
+
+# fig directory
+fig_dir <- paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/fig/njd2016" )
 
 # njd_games has game_number and game_id4 to join different data sources
 this_season     <- "20152016"
 this_session_id <- "2"
+njd_game_player      <- game_plyaer %>% filter( season==this_season, session_id==this_session_id, team_short=="NJD" )
 njd_games            <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short=="NJD" ) %>%
   collect() %>% arrange( game_date )
 njd_games            <- add_team_score_label( njd_games, our_team="NJD" ) %>%
@@ -40,7 +44,7 @@ game_infos <- tbl( nhl_db, "stage_game" )
 ```
 
 ```{r data sets}
-load( file=paste0( nhl_dir$shot, "/njd_through_58.RData" ) )
+load( file=paste0( nhl_dir$shot, "/njd_through_82.RData" ) )
 # njd_summary_spreadsheet <- paste0( nhl_dir$shot, "/NJD_through_gm50.xlsx" )
 # njd_summary <- read_excel( njd_summary_spreadsheet, skip=1)
 
@@ -102,16 +106,18 @@ g.chances + geom_bar( stat="identity", aes(fill=metric), position="dodge") + sta
 
 ```{r linemates}
 this_player_name <- "Colin Wilson"
-this_player_name <- "Alexander Burmistrov"
+this_player_name <- "Travis Zajac"
+this_player_name <- "John Moore"
 this_season <- "20152016"
 this_session_id <- "2"
 
+this_player <- player_tbl %>% filter( first_last_name==this_player_name )
 # Tables needed:
 # player_tbl
 # game_h2h
 # team_score
 
-this_player_games_fill <- get_linemates_by_game( 
+this_player_by_game_list <- get_linemates_by_game( 
   this_player_name,
   this_season,
   this_session_id,
@@ -119,6 +125,19 @@ this_player_games_fill <- get_linemates_by_game(
   game_h2h,
   team_score )
 
+  
+
+this_player_stats_by_game <- get_player_stats_by_game( 
+  this_player_name,
+  this_season,
+  this_session_id,
+  player_tbl,
+  game_player,
+  team_score,
+  overwrite_ev5on5_toi=TRUE )
+
+this_player_toi_by_game_ev    <- this_player_by_game_list$toi_ev5on5
+this_player_linemates_by_game <- this_player_by_game_list$linemates_ev5on5
 ```
 
 ```{r chart param}
@@ -127,12 +146,12 @@ this_player_games_fill <- get_linemates_by_game(
 max_games          <- this_player_games_fill$game_number %>% max()
 max_games_floor_10 <- max_games %>% round(-1) # for vertical grid lines
 
-base_size=7
+base_size <- 5
 season_str <- paste0( substr(this_season,1,4), "-", substr(this_season,5,8) )
 ```
 
 ```{r linemates chart}
-p.linemates <- ggplot( this_player_games_fill, aes(game_number, num_last_name_2_label))
+p.linemates <- ggplot( this_player_linemates_by_game, aes(game_number, num_last_name_2_label))
 p.linemates  <- p.linemates + 
   geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
@@ -160,13 +179,24 @@ p.linemates
 
 ```
 
-```{r linemates chart}
-p.this_player_toi <- ggplot( this_player_toi_games, aes(x=game_number,y=toi) )
+```{r own toi chart}
+toi_max <- this_player_stats_by_game$toi %>% max(na.rm=T) %>% ceiling()
+
+this_player_toi_by_game <- this_player_stats_by_game %>% filter( filter_strength != "ev5on5" | is.na(filter_strength) )
+
+p.this_player_toi <- ggplot( this_player_toi_by_game, aes(x=game_number,y=toi) )
 p.this_player_toi <- p.this_player_toi + 
-  geom_line(color="darkred",size=1) +
-  geom_bar(stat="identity",fill="darkred", alpha=0.1 ) +
+  geom_bar(stat="identity",position="stack", aes(fill=filter_strength), alpha=0.8 ) +
+   scale_fill_manual( name="", 
+                     limits=c( "sh", "all", "pp" ),
+                     labels=c( "SH", "All", "PP" ), # breaks= c( "sh", "ev5on5", "pp"),
+                     values=c( "sh"="red", "all"="navy", "pp"="darkorange" )
+   )
+     
+  geom_line( data=this_player_toi_by_game %>% filter( filter_strength=="all"| is.na(filter_strength) ), 
+            color="darkred",size=1) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, 10), color="grey20", size=0.2 ) +
-  scale_y_continuous( "TOI/gm", breaks=seq(0,40,5), limits=c(0,20) ) +
+  scale_y_continuous( "TOI/gm", breaks=seq(0,40,5), limits=c(0,toi_max) ) +
   scale_x_continuous(breaks=seq(0,100,1), expand = c(0, 0)) + labs(y="TOI/Gm") +
   theme(
     axis.ticks = element_blank(),
@@ -176,9 +206,9 @@ p.this_player_toi <- p.this_player_toi +
     plot.margin = rep(unit(0,"lines"),4),
     panel.margin = unit(0,"null"),
     # panel.grid.minor = element_line( colour="black" ),
-    axis.title.y = element_text( size = rel(1.)  ),
+    axis.title.y = element_text( size = rel(0.7)  ),
     # axis.title.x = element_text( size = rel(1.)  ),
-    axis.text.y  = element_text( size = base_size )
+    axis.text.y  = element_text( size = 1 )
     # axis.text.x  = element_text( size = base_size )
   ) 
 p.this_player_toi
@@ -202,9 +232,9 @@ p.this_player_toi_top <- p.this_player_toi + theme_minimal() + theme_top
 ```{r chart two}
 foo <- rbind_plots( list(p.this_player_toi_top, p.linemates), c(2,8))
 
-
+chart_filename <- paste0( fig_dir, "/", this_player$last_name, "-linemates.png" )
 grid.newpage()
-  png( filename = "tmp.png", width=7, height=4.15, units="in", res=1200,pointsize=1 )
+  png( filename = chart_filename, width=7, height=4.15, units="in", res=1200,pointsize=1 )
   par(
     mar      = c(0, 0, 0, 0),
     xaxs     = "i",

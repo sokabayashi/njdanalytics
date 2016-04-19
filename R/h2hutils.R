@@ -74,7 +74,78 @@ get_linemates_by_game <- function(
   this_player_toi_games  <- this_player_games_fill %>% filter( num_last_name_2_label == this_player_num_last_name_label )
   this_player_games_fill <- this_player_games_fill %>% filter( num_last_name_2_label != this_player_num_last_name_label )
 
-  this_player_games_fill
+  list( toi_ev5on5=this_player_toi_games, linemates_ev5on5=this_player_games_fill )
+}
+
+
+#' Get player stats by game
+#'
+#' @param this_first_last_name String of player first last name
+#' @param this_season String like "20152016"
+#' @param this_session_id "2" or "3"
+#' @param player_tbl Table df
+#' @param game_player game_player table, NOT collected
+#' @param team_score team_score table, NOT collected
+#' @param overwrite_ev5on5_toi Flag for whether to overwrite ev5on5 TOI with all - sh - pp TOI. Default is TRUE.
+#'
+#' @return data frame
+#' @export
+#'
+get_player_stats_by_game <- function(
+  this_first_last_name,
+  this_season="20152016",
+  this_session_id="2",
+  player_tbl,
+  game_player,
+  team_score,
+  overwrite_ev5on5_toi=TRUE ) {
+
+  this_player <- player_tbl %>% filter( first_last_name==this_first_last_name ) %>% collect()
+  this_player_num_last_name <- paste( this_player$number, this_player$last_name )
+  this_player_id            <- this_player$nhl_id %>% as.numeric()
+  this_player_fd            <- this_player$position_fd
+  this_team_short           <- this_player$team_short
+
+  ### ASSUMPTION: player is NOT traded.  using his current team_short from player_tbl and grabbing all games for that team
+  # A more advanced version of this function should provide a df with game_number, game_id4
+  this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
+    select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
+    arrange( game_date ) %>% collect()
+
+  gp <- game_player %>% filter( nhl_id==this_player_id, season==this_season, session_id==this_session_id,
+          filter_period=="all", filter_score_diff=="all", filter_strength %in% c( "all", "ev5on5", "pp", "sh" )
+          ) %>%
+    collect()
+
+  gp_select <- gp %>% select( game_date, game_id4, filter_strength,
+                        toi, toi_pct,
+                        g, a, p, cf, ca, c_net, cf_pct, cf_pct_rel, ff, fa, f_net, ff_pct, ff_pct_rel,
+                        zs_o, zs_n, zs_d, zs_o_pct, zs_o_pct_rel, gf, ga, g_net, sf, sa, s_net, sf_pct, sf_pct_rel,
+                        fo_w, fo_l, pen_i, pen_draw_i,
+                        toi_pct_team, toi_pct_team_f, toi_pct_team_d,
+                        toi_pct_comp, toi_pct_comp_f, toi_pct_comp_d )
+
+  if( overwrite_ev5on5_toi ) {
+    toi_all   <- gp_select %>% filter( filter_strength=="all" ) %>% select( game_date, game_id4, toi )
+    toi_ev5on5<- gp_select %>% filter( filter_strength=="ev5on5" ) %>% select( game_date, game_id4, toi_ev5on5=toi )
+    toi_pp_sh <- gp_select %>% filter( filter_strength %in% c( "pp", "sh" ) ) %>%
+      group_by( game_date, game_id4 ) %>% summarise( toi_special=sum(toi) )
+
+    toi_overwrite   <- toi_all %>% left_join( toi_pp_sh, by=c( "game_date", "game_id4" ) ) %>%
+      left_join( toi_ev5on5, by=c( "game_date", "game_id4" ) ) %>%
+      mutate( toi_remainder=toi-toi_special )
+
+    if( nrow(toi_all) != nrow(toi_ev) ) {
+      stop( "nrow between TOI vectors do not match" )
+    }
+
+    gp_select$toi[ gp_select$filter_strength=="ev5on5" ] <- toi_overwrite$toi_remainder
+
+  }
+
+  this_player_games <- this_team_games %>% left_join( gp_select, by=c( "game_id4"  ) )
+
+  this_player_games
 }
 
 
@@ -399,6 +470,7 @@ aggregate_toi_h2h <- function( toi_h2h_ev, rosters_C, overweight_recent_game=F )
   names( rosters_1 ) <- paste0( names(rosters_1), "_1" )
   names( rosters_2 ) <- paste0( names(rosters_2), "_2" )
 
+  # CAREFUL. A traded player will appear in two rows in rosters_C
   toi_h2h <- toi_h2h %>%
     left_join( rosters_1, by="nhl_id_1" ) %>%
     left_join( rosters_2, by="nhl_id_2" )

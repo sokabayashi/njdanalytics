@@ -30,13 +30,13 @@ aggregate_player_stats(start_date = NULL, end_date = NULL,
 
 \item{score_diff}{trail_1, trail_2, trail_3, tied, lead_1, lead_2, lead_3.  Not in game_player: leading, trailing. trail_2plus, lead_2plus.}
 
-\item{team_only}{Default is FALSE}
+\item{team_only}{Default is FALSE. Don't care about individual players, only team.  Faster.}
 
-\item{h2h_stats}{Default is FALSE}
+\item{h2h_stats}{Default is FALSE.  Don't care about QoC QoT.  Much faster.}
 
-\item{group_team}{Default is FALSE}
+\item{group_team}{Default is FALSE. If TRUE, a traded player will appear twice, e.g., 2015 Jagr on NJD and FLA with separate stats.}
 
-\item{home_away}{Default is "all"}
+\item{home_away}{Default is "all".}
 
 \item{ignore_team_games}{Vector of team_shorts to exclude all games from, e.g., 2015 BUF. Default is NULL}
 
