@@ -1,0 +1,159 @@
+---
+title: "NJD Chances by Line/Pair"
+geometry: margin=1cm
+output: html_document
+fontsize: 10pt
+---
+
+```{r Setup knitr, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec = ",")
+```
+
+```{r Load db and RData, include=F}
+library( njdanalytics )
+
+nhl_db <- setup_nhl_db()
+player_tbl           <- tbl( nhl_db, "player"           ) %>% collect()
+team_score           <- tbl( nhl_db, "team_score"       )
+stage_game           <- tbl( nhl_db, "stage_game"       )
+stage_roster         <- tbl( nhl_db, "stage_roster"     )
+stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay" )
+stage_shift_interval <- tbl( nhl_db, "stage_shift_interval" )
+game_player          <- tbl( nhl_db, "game_player"      )
+team_tbl             <- tbl( nhl_db, "team"             ) %>% collect()
+
+this_season     <- "20152016"
+this_session_id <- "2"
+
+# fig directory
+fig_dir <- paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/fig/njd2016/f_lines" )
+
+#################################``########################################
+# MANUALLY UPDATE
+game_suffix <- 82
+
+#########################################################################
+
+# njd_games has game_number and game_id4 to join different data sources
+our_team_short  <- "NJD" # might change perspective for games we're not in?
+our_team_common <- team_tbl %>% filter( name_short==our_team_short ) %>% select( name_common ) %>% unlist( use.names = F )
+our_games       <- team_score %>% 
+                          filter( season==this_season, session_id==this_session_id, team_short==our_team_short) %>%
+                          collect() %>% arrange( game_date )
+our_games            <- add_team_score_label( our_games, our_team=our_team_short ) %>%
+                          select( game_date, game_number, season, session_id, game_id4, ha, opp_team_short, game_label )
+our_game_id4s        <- our_games$game_id4
+
+# njd_games, shots_tbl, player_chances_df, njd_players_by_game, pair_chances_df
+load( file=paste0( nhl_dir$shot, "/njd_through_", game_suffix, ".RData" ))
+```
+
+
+```{r analysis parameters}
+this_season     <- "20152016"
+this_session_id <- "2"
+```
+
+```{r db tables}
+rosters      <- stage_roster %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+pbp          <- stage_playbyplay %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+stage_game   <- stage_game %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+
+# 21.9k rows in our shift interval
+stage_shift_interval <- stage_shift_interval %>%
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+```
+
+```{r shift interval mutate}
+
+shift_interval <- stage_shift_interval %>% 
+                    left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) ) %>% 
+                    mutate(
+                           on_ice_skater_ids_h = paste( home_p1_id, home_p2_id, home_p3_id, home_p4_id, home_p5_id, home_p6_id ) %>% 
+                                                  gsub( "NA", "", . ) %>% str_trim(),
+                           on_ice_skater_ids_a = paste( home_p1_id, away_p2_id, away_p3_id, away_p4_id, away_p5_id, away_p6_id ) %>% 
+                                                  gsub( "NA", "", . ) %>% str_trim(),
+                           our_on_ice_skater_ids = ifelse( our_ha=="H", on_ice_skater_ids_h, on_ice_skater_ids_a )
+                    ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, away_p1_fd=position_fd ), by=c( "away_p1_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, away_p2_fd=position_fd ), by=c( "away_p2_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, away_p3_fd=position_fd ), by=c( "away_p3_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, away_p4_fd=position_fd ), by=c( "away_p4_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, away_p5_fd=position_fd ), by=c( "away_p5_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, away_p6_fd=position_fd ), by=c( "away_p6_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, home_p1_fd=position_fd ), by=c( "home_p1_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, home_p2_fd=position_fd ), by=c( "home_p2_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, home_p3_fd=position_fd ), by=c( "home_p3_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, home_p4_fd=position_fd ), by=c( "home_p4_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, home_p5_fd=position_fd ), by=c( "home_p5_id"="nhl_id" ) ) %>% 
+                    left_join( player_tbl %>% select( nhl_id, home_p6_fd=position_fd ), by=c( "home_p6_id"="nhl_id" ) ) %>% 
+                    rowwise() %>% 
+                    mutate(
+                      on_ice_f_ids_a = paste( ifelse( away_p1_fd=="F", away_p1_id, "" ), 
+                                              ifelse( away_p2_fd=="F", away_p2_id, "" )
+                        ),
+                      num_f_a = sum( away_p1_fd=="F", away_p2_fd=="F", away_p3_fd=="F", away_p4_fd=="F", away_p5_fd=="F", away_p6_fd=="F", na.rm=T ),
+                      num_f_h = sum( home_p1_fd=="F", home_p2_fd=="F", home_p3_fd=="F", home_p4_fd=="F", home_p5_fd=="F", home_p6_fd=="F", na.rm=T ),
+                      our_num_f = ifelse( our_ha=="H", num_f_h, num_f_a ),
+                      
+
+                          )
+
+shift_interval %>% slice(1) %>% glimpse
+
+```
+
+
+
+
+
+
+
+```{r NJD F pair summary}
+njd_team_gp_ev$toi %>% sum()
+
+defensemen_h2h_ev <- njd_h2h_ev %>% filter( position_fd_1=="D", position_fd_2=="D" ) %>% arrange(
+                                    desc(toi_1), desc(toi)
+) %>% select( -matches("position|team_comp|faceoff|is|fo|num|rank|team_short|shoots"))
+
+defensemen_gp_ev <- defensemen_h2h_ev %>% group_by( nhl_id_1, last_name_1, toi_1 ) %>% mutate(
+                      toi_pct          = round( toi / first(toi) * 100, 1),
+                      toi_wo           = toi - first(toi),  
+                      cf_wo            = cf -  first(cf),
+                      ca_wo            = ca -  first(ca),
+                      c_net_wo         = c_net - first(c_net),
+                      green_net_wo     = green_net - first(green_net),
+                      blue_net_wo      = blue_net - first(blue_net),
+                      greenblue_f_wo   = greenblue_f - first(greenblue_f),
+                      greenblue_a_wo   = greenblue_a - first(greenblue_a),
+                      greenblue_net_wo = greenblue_net - first(greenblue_net),
+                      c_net_60_wo      = round( c_net  / toi_wo * 60, 3 ),
+                      c_net_60_wowy    = c_net_60 - c_net_60_wo,
+                      green_net_60_wo  = round( green_net  / toi_wo * 60, 3 ),
+                      green_net_60_wowy= green_net_60 - green_net_60_wo,
+                      blue_net_60_wo   = round( blue_net  / toi_wo * 60, 3 ),
+                      blue_net_60_wowy = blue_net_60 - blue_net_60_wo,
+                      greenblue_net_60_wo = round( greenblue_net  / toi_wo * 60, 3 ),
+                      greenblue_net_60_wowy = greenblue_net_60 - greenblue_net_60_wo,
+                      greenblue_f_pct_wo  = round( greenblue_f_wo / cf_wo * 100, 3 ),
+                      greenblue_a_pct_wo  = round( greenblue_a_wo / ca_wo * 100, 3 )
+)
+
+write_csv( defensemen_gp_ev, path=paste0(fig_dir, "/njd_d_pairs.csv" ))
+```
+
+
+
+
+
+
+
+
+
+
+
+
