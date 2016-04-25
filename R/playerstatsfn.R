@@ -139,10 +139,10 @@ calc_shot_stats_rel <- function( game_player, corsi_adj_factor ) {
 #' @param period String for filtering, "1", "2", "3", "4", ... "1or2" also okay.
 #' @param strength ev5on5, ev4on4, pp, sh, comp_en, own_en, other.  Not in game player: no_en
 #' @param score_diff trail_1, trail_2, trail_3, tied, lead_1, lead_2, lead_3.  Not in game_player: leading, trailing. trail_2plus, lead_2plus.
-#' @param team_only Default is FALSE
-#' @param h2h_stats Default is FALSE
-#' @param group_team Default is FALSE
-#' @param home_away Default is "all"
+#' @param team_only Default is FALSE. Don't care about individual players, only team.  Faster.
+#' @param h2h_stats Default is FALSE.  Don't care about QoC QoT.  Much faster.
+#' @param group_team Default is FALSE. If TRUE, a traded player will appear twice, e.g., 2015 Jagr on NJD and FLA with separate stats.
+#' @param home_away Default is "all".
 #' @param ignore_team_games Vector of team_shorts to exclude all games from, e.g., 2015 BUF. Default is NULL
 #' @param nhl_db DB objection to avoid repeated connections during multiple calls
 #' @param corsi_adj_factor Double.  Default is 0.25 for faceoff diff adj on CR.

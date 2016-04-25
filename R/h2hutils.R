@@ -30,7 +30,7 @@ get_linemates_by_game <- function(
                                     select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
                                     arrange( game_date ) %>% collect()
 
-  linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id,
+  linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id, game_id4 %in% this_team_games$game_id4,
                                     filter_score_diff=="all", filter_strength=="ev5on5",
                                     nhl_id_1==this_player_id, team_comp=="T" ) %>%
                             group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
@@ -123,7 +123,7 @@ get_player_stats_by_game <- function(
                         zs_o, zs_n, zs_d, zs_o_pct, zs_o_pct_rel, gf, ga, g_net, sf, sa, s_net, sf_pct, sf_pct_rel,
                         fo_w, fo_l, pen_i, pen_draw_i,
                         toi_pct_team, toi_pct_team_f, toi_pct_team_d,
-                        toi_pct_comp, toi_pct_comp_f, toi_pct_comp_d )
+                        toi_pct_comp, toi_pct_comp_f, toi_pct_comp_d ) %>% arrange( game_date )
 
   if( overwrite_ev5on5_toi ) {
     toi_all   <- gp_select %>% filter( filter_strength=="all" ) %>% select( game_date, game_id4, toi )
@@ -135,7 +135,7 @@ get_player_stats_by_game <- function(
       left_join( toi_ev5on5, by=c( "game_date", "game_id4" ) ) %>%
       mutate( toi_remainder=toi-toi_special )
 
-    if( nrow(toi_all) != nrow(toi_ev) ) {
+    if( nrow(toi_all) != nrow(toi_overwrite) ) {
       stop( "nrow between TOI vectors do not match" )
     }
 
