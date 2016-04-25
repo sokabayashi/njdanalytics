@@ -197,26 +197,39 @@ for( this_game_number in game_numbers ) {
   # Corsi - All and EV
   # Fenwick - All and EV
   shots_df_ev5on5  <- shots_df        %>% filter( strength=="EV 5v5" )
-  ushots_df_ev5on5 <- shots_df_ev5on5 %>% filter( shot != "BLOCK" )
+  shots_df_pp      <- shots_df        %>% filter( grepl( "PP", strength ) )
+  shots_df_sh      <- shots_df        %>% filter( grepl( "SH", strength ) )
   ushots_df        <- shots_df        %>% filter( shot != "BLOCK" )
+  ushots_df_ev5on5 <- shots_df_ev5on5 %>% filter( shot != "BLOCK" )
+  ushots_df_pp     <- shots_df_pp     %>% filter( shot != "BLOCK" )
+  ushots_df_sh     <- shots_df_sh     %>% filter( shot != "BLOCK" )
 
   corsi_all       <- tally_sc_by_ha_number( shots_df        )
   corsi_ev5on5    <- tally_sc_by_ha_number( shots_df_ev5on5 )
+  corsi_pp        <- tally_sc_by_ha_number( shots_df_pp     )
+  corsi_sh        <- tally_sc_by_ha_number( shots_df_sh     )
 
-  goal_ev5on5     <- tally_sc_by_ha_number( shots_df_ev5on5 %>% filter( shot == "GOAL" ) )
   goal_all        <- tally_sc_by_ha_number( shots_df        %>% filter( shot == "GOAL" ) )
+  goal_ev5on5     <- tally_sc_by_ha_number( shots_df_ev5on5 %>% filter( shot == "GOAL" ) )
+  goal_pp         <- tally_sc_by_ha_number( shots_df_pp     %>% filter( shot == "GOAL" ) )
+  goal_sh         <- tally_sc_by_ha_number( shots_df_sh     %>% filter( shot == "GOAL" ) )
+
 
   fenwick_all     <- tally_sc_by_ha_number( ushots_df        )
   fenwick_ev5on5  <- tally_sc_by_ha_number( ushots_df_ev5on5 )
+  fenwick_pp      <- tally_sc_by_ha_number( ushots_df_pp     )
+  fenwick_sh      <- tally_sc_by_ha_number( ushots_df_sh     )
 
   # UNBLOCKED Green and Blue shots
   green_all       <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="GREEN" ) )
   green_ev5on5    <- tally_sc_by_ha_number( ushots_df_ev5on5 %>% filter( shotcolor=="GREEN" ) )
-  green_pp        <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="GREEN", grepl("PP", strength) ) )
+  green_pp        <- tally_sc_by_ha_number( ushots_df_pp     %>% filter( shotcolor=="GREEN" ) )
+  green_sh        <- tally_sc_by_ha_number( ushots_df_sh     %>% filter( shotcolor=="GREEN" ) )
 
   blue_all        <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="BLUE" ) )
   blue_ev5on5     <- tally_sc_by_ha_number( ushots_df_ev5on5 %>% filter( shotcolor=="BLUE" ) )
-  blue_pp         <- tally_sc_by_ha_number( ushots_df        %>% filter( shotcolor=="BLUE", grepl("PP", strength) ) )
+  blue_pp         <- tally_sc_by_ha_number( ushots_df_pp     %>% filter( shotcolor=="BLUE" ) )
+  blue_sh         <- tally_sc_by_ha_number( ushots_df_sh     %>% filter( shotcolor=="BLUE" ) )
 
   greenblue_ev5on5    <- tally_sc_by_ha_number( ushots_df_ev5on5 %>% filter( shotcolor=="GREEN" | shotcolor=="BLUE" ) )
 
@@ -241,16 +254,24 @@ for( this_game_number in game_numbers ) {
   njd_chances <- rbind(
     cbind( game_block, "metric"="corsi",            "strength"="all",    corsi_all,               stringsAsFactors=F ),
     cbind( game_block, "metric"="corsi",            "strength"="ev5on5", corsi_ev5on5,            stringsAsFactors=F ),
+    cbind( game_block, "metric"="corsi",            "strength"="pp",     corsi_pp,                stringsAsFactors=F ),
+    cbind( game_block, "metric"="corsi",            "strength"="sh",     corsi_sh,                stringsAsFactors=F ),
     cbind( game_block, "metric"="fenwick",          "strength"="all",    fenwick_all,             stringsAsFactors=F ),
     cbind( game_block, "metric"="fenwick",          "strength"="ev5on5", fenwick_ev5on5,          stringsAsFactors=F ),
+    cbind( game_block, "metric"="fenwick",          "strength"="pp",     fenwick_pp,              stringsAsFactors=F ),
+    cbind( game_block, "metric"="fenwick",          "strength"="sh",     fenwick_sh,              stringsAsFactors=F ),
     cbind( game_block, "metric"="goal",             "strength"="all",    goal_all,                stringsAsFactors=F ),
     cbind( game_block, "metric"="goal",             "strength"="ev5on5", goal_ev5on5,             stringsAsFactors=F ),
+    cbind( game_block, "metric"="goal",             "strength"="pp",     goal_pp,                 stringsAsFactors=F ),
+    cbind( game_block, "metric"="goal",             "strength"="sh",     goal_sh,                 stringsAsFactors=F ),
     cbind( game_block, "metric"="green",            "strength"="all",    green_all,               stringsAsFactors=F ),
     cbind( game_block, "metric"="green",            "strength"="ev5on5", green_ev5on5,            stringsAsFactors=F ),
     cbind( game_block, "metric"="green",            "strength"="pp",     green_pp,                stringsAsFactors=F ),
+    cbind( game_block, "metric"="green",            "strength"="sh",     green_sh,                stringsAsFactors=F ),
     cbind( game_block, "metric"="blue",             "strength"="all",    blue_all,                stringsAsFactors=F ),
     cbind( game_block, "metric"="blue",             "strength"="ev5on5", blue_ev5on5,             stringsAsFactors=F ),
     cbind( game_block, "metric"="blue",             "strength"="pp",     blue_pp,                 stringsAsFactors=F ),
+    cbind( game_block, "metric"="blue",             "strength"="sh",     blue_sh,                 stringsAsFactors=F ),
     cbind( game_block, "metric"="greenblue",        "strength"="ev5on5", greenblue_ev5on5,        stringsAsFactors=F )
     # cbind( game_block, "metric"="greennomiss",      "strength"="ev5on5", greennomiss_ev5on5,      stringsAsFactors=F ),
     # cbind( game_block, "metric"="bluenomiss",       "strength"="ev5on5", bluenomiss_ev5on5,       stringsAsFactors=F )
@@ -373,7 +394,7 @@ for( this_game_number in game_numbers ) {
 
 
   njd_chances_toi    <- njd_chances %>% left_join( this_game_player %>%
-                                        filter( filter_score_diff=="all" ) %>%
+                                        filter( filter_score_diff=="all", filter_period=="all" ) %>%
                                         select( strength=filter_strength, nhl_id, toi, cf, ca, c_net, ff, fa, f_net ),
                                 by=c("strength", "nhl_id") )
 
