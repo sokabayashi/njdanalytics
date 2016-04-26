@@ -68,45 +68,155 @@ stage_shift_interval <- stage_shift_interval %>%
                           filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
 ```
 
-```{r shift interval mutate}
+```{r shift interval nest}
+# Get HA perspective joined
+shift_interval_spread <- stage_shift_interval %>% 
+    left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) ) %>% 
+    mutate(
+      ev5on5    = ifelse( num_skaters_h==5 & num_goalies_h==1 & num_skaters_a==5 & num_goalies_a==1, TRUE, FALSE )
+    )
 
-shift_interval <- stage_shift_interval %>% 
-                    left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) ) %>% 
-                    mutate(
-                           on_ice_skater_ids_h = paste( home_p1_id, home_p2_id, home_p3_id, home_p4_id, home_p5_id, home_p6_id ) %>% 
-                                                  gsub( "NA", "", . ) %>% str_trim(),
-                           on_ice_skater_ids_a = paste( home_p1_id, away_p2_id, away_p3_id, away_p4_id, away_p5_id, away_p6_id ) %>% 
-                                                  gsub( "NA", "", . ) %>% str_trim(),
-                           our_on_ice_skater_ids = ifelse( our_ha=="H", on_ice_skater_ids_h, on_ice_skater_ids_a )
-                    ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, away_p1_fd=position_fd ), by=c( "away_p1_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, away_p2_fd=position_fd ), by=c( "away_p2_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, away_p3_fd=position_fd ), by=c( "away_p3_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, away_p4_fd=position_fd ), by=c( "away_p4_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, away_p5_fd=position_fd ), by=c( "away_p5_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, away_p6_fd=position_fd ), by=c( "away_p6_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, home_p1_fd=position_fd ), by=c( "home_p1_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, home_p2_fd=position_fd ), by=c( "home_p2_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, home_p3_fd=position_fd ), by=c( "home_p3_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, home_p4_fd=position_fd ), by=c( "home_p4_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, home_p5_fd=position_fd ), by=c( "home_p5_id"="nhl_id" ) ) %>% 
-                    left_join( player_tbl %>% select( nhl_id, home_p6_fd=position_fd ), by=c( "home_p6_id"="nhl_id" ) ) %>% 
-                    rowwise() %>% 
-                    mutate(
-                      on_ice_f_ids_a = paste( ifelse( away_p1_fd=="F", away_p1_id, "" ), 
-                                              ifelse( away_p2_fd=="F", away_p2_id, "" )
-                        ),
-                      num_f_a = sum( away_p1_fd=="F", away_p2_fd=="F", away_p3_fd=="F", away_p4_fd=="F", away_p5_fd=="F", away_p6_fd=="F", na.rm=T ),
-                      num_f_h = sum( home_p1_fd=="F", home_p2_fd=="F", home_p3_fd=="F", home_p4_fd=="F", home_p5_fd=="F", home_p6_fd=="F", na.rm=T ),
-                      our_num_f = ifelse( our_ha=="H", num_f_h, num_f_a ),
-                      
-
+# Gather away_p1_id - home_p6_id columns and convert to rows.
+# Each unique time interval with then have multiple rows, one for each on ice player.
+shift_interval_gather <- shift_interval_spread %>% gather( player_label, player_id, away_p1_id:home_p6_id ) %>% 
+                          filter( !is.na(player_id) ) %>% 
+                          left_join(
+                            player_tbl %>% select( nhl_id, last_name, position_fd ), by=c( "player_id"="nhl_id" )
+                          ) %>% mutate(
+                            player_ha = ifelse( grepl( "home", player_label ), "H", "A" )
                           )
 
-shift_interval %>% slice(1) %>% glimpse
+# Drop extra columns
+# sorting by ID by team ensures unique line representation when we then push into lists
+shift_interval_ev <- shift_interval_gather %>% 
+    select( -starts_with("away_player"), -starts_with("home_player"), 
+            -starts_with( "on_ice"), -ends_with("_skaters"), -ends_with( "_goalie") ) %>% 
+    arrange( game_date, start_cum, player_ha, desc(position_fd), player_id ) 
+  
+shift_interval_group_F_ev <- shift_interval_ev %>% 
+    filter( ev5on5, position_fd=="F" ) %>% 
+    group_by( game_date, season, session_id, game_id4, period, start_cum, duration, our_ha ) %>% 
+    summarise(
+                    num_F_h = sum( player_ha=="H" ),
+                    num_F_a = sum( player_ha=="A" ),
+                    F_id_h_list  = list( player_id[ player_ha=="H"] ),
+                    F_h_list     = list( last_name[ player_ha=="H"] ),
+                    F_id_a_list  = list( player_id[ player_ha=="A"] ),
+                    F_a_list     = list( last_name[ player_ha=="A"] )
+  ) 
+  
+our_shift_interval_F <- shift_interval_group_F_ev %>% 
+mutate(
+  our_F_id_list = ifelse( our_ha=="H", F_id_h_list, F_id_a_list ),
+  our_F_list    = ifelse( our_ha=="H", F_h_list,    F_a_list ),
+  our_F_ids   = paste( our_F_id_list %>% unlist(), collapse=" " ),
+  our_F_names = paste( our_F_list %>% unlist(), collapse=" " )
+) 
+    
+```
+
+```{r our F toi summary}
+# Total EV5on5 TOI for season
+# 3874 agrees with our D-men analysis
+season_total_toi_ev <- our_shift_interval %>% ungroup() %>% summarise( toi=sum(duration) ) %>% unlist(use.names = F)
+season_total_toi_ev
+# back of the envelope
+82 * 48
+
+our_F_summary <- our_shift_interval %>% ungroup() %>% group_by( our_F_ids, our_F_names ) %>% 
+            summarise( toi=sum(duration) ) %>% ungroup() %>% arrange( desc( toi )) %>% filter( toi > 30 ) %>% 
+            mutate( toi_pct = round( toi/season_total_toi_ev*100,2 ) )
+
+our_F_summary %>% View
+
+our_F_lines <- our_F_summary %>% select( ids=our_F_ids, names=our_F_names )
+```
+
+```{r pbp nest}
+event_types_study <- c( "FAC", "BLOCK", "MISS", "SHOT", "GOAL"  ) # , "ICING",  "OFFSIDE", "PENL"
+
+pbp_spread <- pbp %>% 
+    filter( event_type %in% event_types_study ) %>% 
+    left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) )
+
+pbp_gather <- pbp_spread %>% 
+                gather( player_label, player_id, away_p1_id:home_p6_id ) %>% 
+                          filter( !is.na(player_id) ) %>% 
+                          left_join(
+                            player_tbl %>% select( nhl_id, last_name, position_fd ), by=c( "player_id"="nhl_id" )
+                          ) %>% mutate(
+                            player_ha = ifelse( grepl( "home", player_label ), "H", "A" )
+                          )
+
+# Drop extra columns
+# sorting by ID by team ensures unique line representation when we then push into lists
+pbp_ev <- pbp_gather %>% 
+    select( -starts_with("away_player"), -starts_with("home_player"), 
+            -starts_with( "on_ice"), -ends_with("_skaters"), -ends_with( "_goalie") ) %>% 
+    arrange( game_date, start_cum, player_ha, desc(position_fd), player_id ) 
+  
+pbp_group_F_ev <- pbp_ev %>% 
+    filter( ev5on5, position_fd=="F" ) %>% 
+    group_by( game_date, season, session_id, game_id4, period, start_cum, our_ha, 
+              event_type, etext, event_team, event_team_ha, homezone ) %>% 
+    summarise(
+                    num_F_h = sum( player_ha=="H" ),
+                    num_F_a = sum( player_ha=="A" ),
+                    F_id_h_list  = list( player_id[ player_ha=="H"] ),
+                    F_h_list     = list( last_name[ player_ha=="H"] ),
+                    F_id_a_list  = list( player_id[ player_ha=="A"] ),
+                    F_a_list     = list( last_name[ player_ha=="A"] )
+  ) 
+  
+our_pbp_F <- pbp_group_F_ev %>% 
+mutate(
+  our_F_id_list = ifelse( our_ha=="H", F_id_h_list, F_id_a_list ),
+  our_F_list    = ifelse( our_ha=="H", F_h_list,    F_a_list ),
+  our_F_ids   = paste( our_F_id_list %>% unlist(), collapse=" " ),
+  our_F_names = paste( our_F_list %>% unlist(), collapse=" " )
+) %>% filter(
+  our_F_ids %in% our_F_lines$ids
+)
+
+our_pbp_F <- our_pbp_F %>% select( -starts_with( "num") )
+```
+
+```{r faceoff}
+fac_df <- our_pbp_F %>% ungroup() %>% filter( event_type=="FAC" ) 
+fac_df <- fac_df %>% mutate(
+  our_zs = ifelse( our_ha=="H", homezone,
+                ifelse( homezone=="Def", "Off",
+                        ifelse( homezone=="Off", "Def", "Neu" )))
+)
+
+fac_summary <- fac_df %>% 
+                  group_by( our_F_ids, our_F_names ) %>% 
+                  summarize( 
+                    zs_o = sum(our_zs=="Off"),
+                    zs_n = sum(our_zs=="Neu"),
+                    zs_d = sum(our_zs=="Def"),
+                    zs_o_pct = round( zs_o / (zs_o + zs_d ), 3 ),
+                    fo_w = sum(event_team == our_team_short),
+                    fo_l = sum(event_team != our_team_short),
+                    fo_count = fo_w + fo_l,
+                    fo_pct   = round( fo_w / fo_count, 3 )
+                    )
 
 ```
 
+```{r corsi}
+shot_df <- our_pbp_F %>% ungroup() %>% filter( event_type %in% c( "BLOCK", "MISS", "SHOT", "GOAL") ) 
+
+shot_summary <- shot_df %>% 
+                  group_by( our_F_ids, our_F_names ) %>% 
+                  summarize( 
+                    cf = sum( event_team == our_team_short ),
+                    ca = sum( event_team != our_team_short ),
+                    
+                    fo_count = fo_w + fo_l,
+                    fo_pct   = round( fo_w / fo_count, 3 )
+                    )
+```
 
 
 
