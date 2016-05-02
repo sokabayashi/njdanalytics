@@ -55,8 +55,9 @@ get_linemates_by_game <- function(
   linemates_season <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_name_2 ) %>%
                                     summarise( toi = sum(toi) ) %>% ungroup() %>%
                                     mutate(
-                                      toi_pct_total         = round( 100*(toi/max(toi)), 1 ),
-                                      num_last_name_2_label = paste0( num_last_name_2, "\n", "(", toi_pct_total, "%)" )
+                                      toi_pct_total         = round( 100*(toi/max(toi)) ),
+                                      num_last_name_2_label = paste0( num_last_name_2, "\n",
+                                                              round(toi), " min (", toi_pct_total, "%)" )
                                     ) %>% arrange( desc(toi) )
   linemates_season <- linemates_season %>% filter( num_last_name_2 %in% linemates_num_last_name )
   this_player_num_last_name_label <- linemates_season$num_last_name_2_label[1]
