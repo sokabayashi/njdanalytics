@@ -1,5 +1,5 @@
 ---
-title: "NJD Chances by Line/Pair"
+title: "NJD Chances by Line"
 geometry: margin=1cm
 output: html_document
 fontsize: 10pt
@@ -90,7 +90,7 @@ shift_interval_gather <- shift_interval_spread %>% gather( player_label, player_
 # sorting by ID by team ensures unique line representation when we then push into lists
 shift_interval_ev <- shift_interval_gather %>% 
     select( -starts_with("away_player"), -starts_with("home_player"), 
-            -starts_with( "on_ice"), -ends_with("_skaters"), -ends_with( "_goalie") ) %>% 
+            -starts_with( "on_ice"), -ends_with("_skaters"), -ends_with( "_goalie") ) %>% ungroup() %>% 
     arrange( game_date, start_cum, player_ha, desc(position_fd), player_id ) 
   
 shift_interval_group_F_ev <- shift_interval_ev %>% 
@@ -124,19 +124,19 @@ season_total_toi_ev
 82 * 48
 
 our_F_summary <- our_shift_interval %>% ungroup() %>% group_by( our_F_ids, our_F_names ) %>% 
-            summarise( toi=sum(duration) ) %>% ungroup() %>% arrange( desc( toi )) %>% filter( toi > 30 ) %>% 
+            summarise( toi=sum(duration) ) %>% ungroup() %>% arrange( desc( toi )) %>% filter( toi > 0 ) %>% 
             mutate( toi_pct = round( toi/season_total_toi_ev*100,2 ) )
 
-our_F_summary %>% View
+our_F_summary
 
-our_F_lines <- our_F_summary %>% select( ids=our_F_ids, names=our_F_names )
+our_F_lines <- our_F_summary %>% select( ids=our_F_ids, names=our_F_names, toi )
 ```
 
 ```{r pbp nest}
-event_types_study <- c( "FAC", "BLOCK", "MISS", "SHOT", "GOAL"  ) # , "ICING",  "OFFSIDE", "PENL"
+event_types_study <- c( "FAC", "BLOCK", "MISS", "SHOT", "GOAL", "PENL"  ) # , "ICING",  "OFFSIDE", "PENL"
 
 pbp_spread <- pbp %>% 
-    filter( event_type %in% event_types_study ) %>% 
+    filter( event_type %in% event_types_study ) %>% select( -id, -xcoord, -ycoord, -event_length ) %>% distinct() %>% 
     left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) )
 
 pbp_gather <- pbp_spread %>% 
@@ -146,7 +146,15 @@ pbp_gather <- pbp_spread %>%
                             player_tbl %>% select( nhl_id, last_name, position_fd ), by=c( "player_id"="nhl_id" )
                           ) %>% mutate(
                             player_ha = ifelse( grepl( "home", player_label ), "H", "A" )
-                          )
+                          ) 
+pbp_gather <- pbp_gather %>% left_join(
+                stage_roster %>% select( season, session_id, game_id4, ha_number, event_player1_name=last_name ), 
+                by = c( "season", "session_id", "game_id4", event_player1 = "ha_number" )
+) %>% left_join(
+                stage_roster %>% select( season, session_id, game_id4, ha_number, event_player2_name=last_name ), 
+                by = c( "season", "session_id", "game_id4", event_player2 = "ha_number" )
+)
+
 
 # Drop extra columns
 # sorting by ID by team ensures unique line representation when we then push into lists
@@ -158,7 +166,7 @@ pbp_ev <- pbp_gather %>%
 pbp_group_F_ev <- pbp_ev %>% 
     filter( ev5on5, position_fd=="F" ) %>% 
     group_by( game_date, season, session_id, game_id4, period, start_cum, our_ha, 
-              event_type, etext, event_team, event_team_ha, homezone ) %>% 
+              event_type, etext, event_team, event_team_ha, homezone, event_player1_name, event_player2_name ) %>% 
     summarise(
                     num_F_h = sum( player_ha=="H" ),
                     num_F_a = sum( player_ha=="A" ),
@@ -179,6 +187,18 @@ mutate(
 )
 
 our_pbp_F <- our_pbp_F %>% select( -starts_with( "num") )
+
+
+exclude_pbp_F <- pbp_group_F_ev %>% 
+mutate(
+  our_F_id_list = ifelse( our_ha=="H", F_id_h_list, F_id_a_list ),
+  our_F_list    = ifelse( our_ha=="H", F_h_list,    F_a_list ),
+  our_F_ids   = paste( our_F_id_list %>% unlist(), collapse=" " ),
+  our_F_names = paste( our_F_list %>% unlist(), collapse=" " )
+) %>% filter(
+  !our_F_ids %in% our_F_lines$ids
+)
+
 ```
 
 ```{r faceoff}
@@ -200,9 +220,32 @@ fac_summary <- fac_df %>%
                     fo_l = sum(event_team != our_team_short),
                     fo_count = fo_w + fo_l,
                     fo_pct   = round( fo_w / fo_count, 3 )
-                    )
+                    ) %>% ungroup()
 
 ```
+
+```{r penalties}
+# penalties drawn/taken by any player, F or D
+pen_df <- our_pbp_F %>% ungroup() %>% filter( event_type=="PENL" ) 
+
+pen_summary <- pen_df %>% 
+                  group_by( our_F_ids, our_F_names ) %>% 
+                  summarize( 
+                    player_or = our_F_list %>% unlist() %>% str_to_upper(),
+                    pen      = sum( event_player1_name %in% player_or ),
+                    pen_draw = sum( event_player2_name %in% player_or ),
+                    # pen      = sum( event_team == our_team_short ),
+                    # pen_draw = sum( event_team != our_team_short ),
+                    pen_diff = pen_draw - pen
+                    ) %>% ungroup() %>% arrange( desc(pen_diff))
+
+pen_df %>% filter( str_detect( our_F_names, "Palmieri")) %>% summarize(
+                    pen      = sum( event_player1_name  == "PALMIERI", na.rm=T ),
+                    pen_draw = sum( event_player2_name  == "PALMIERI", na.rm=T ),
+                    pen_diff = pen_draw - pen
+)
+```
+
 
 ```{r corsi}
 shot_df <- our_pbp_F %>% ungroup() %>% filter( event_type %in% c( "BLOCK", "MISS", "SHOT", "GOAL") ) 
@@ -210,15 +253,182 @@ shot_df <- our_pbp_F %>% ungroup() %>% filter( event_type %in% c( "BLOCK", "MISS
 shot_summary <- shot_df %>% 
                   group_by( our_F_ids, our_F_names ) %>% 
                   summarize( 
-                    cf = sum( event_team == our_team_short ),
-                    ca = sum( event_team != our_team_short ),
-                    
-                    fo_count = fo_w + fo_l,
-                    fo_pct   = round( fo_w / fo_count, 3 )
-                    )
+                    cf_nhl = sum( event_team == our_team_short ),
+                    ca_nhl = sum( event_team != our_team_short ),
+                    ff_nhl = sum( event_team == our_team_short & event_type != "BLOCK" ),
+                    fa_nhl = sum( event_team != our_team_short & event_type != "BLOCK" ),
+                    ff_pct_nhl   = round( ff_nhl / (ff_nhl + fa_nhl ), 3 ),
+                    cf_pct_nhl   = round( cf_nhl / (cf_nhl + ca_nhl ), 3 )
+                    ) %>% ungroup()
+```
+
+```{r gio check NHL}
+gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Gionta"))
+(gionta_df$event_team=="NJD") %>% table() %>% prop.table()
+
+gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Gionta"), str_detect( our_F_names, "Tootoo"), str_detect( our_F_names, "Farnham") )
+(gionta_df$event_team=="NJD") %>% table() %>% prop.table()
+
+gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Gionta"), str_detect( our_F_names, "Ruutu"), str_detect( our_F_names, "Farnham") )
+(gionta_df$event_team=="NJD") %>% table() %>% prop.table()
+
+gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Kennedy"), str_detect( our_F_names, "Josefson"), str_detect( our_F_names, "Kalinin") )
+(gionta_df$event_team=="NJD") %>% table() %>% prop.table()
+```
+
+```{r chances clean up}
+
+shots_all <- shots_all_df %>% distinct() %>% 
+  filter( !(game_id4=="0094" & start_cum==13.533 & is.na(comment)) ) %>%  # bad redundant point
+  mutate(
+                    id = on_ice_ids %>% gsub( "NA", "", . ) %>% str_split( " " ) 
+) %>% unnest() %>% mutate(
+  id = id %>% as.numeric()
+) 
+
+shots_all <- shots_all %>% left_join(
+    stage_roster %>% select( game_date, season, session_id, game_id4, nhl_id, last_name, team_short, position, player_ha=team_ha ), 
+                      by=c( "season", "session_id", "game_id4", "id"="nhl_id" )
+) %>% mutate(
+  position_fd = ifelse( position=="G", "G", 
+                        ifelse(position=="D", "D", "F" ) )
+)
+shots_all <- shots_all %>% filter( position_fd != "G" )  %>% ungroup() %>% 
+              arrange( game_date, start_cum, player_ha, desc(position_fd), id )  ## id sort guarantees unique lines
+
+shots_ev_F <- shots_all %>% filter( ev5on5, position_fd=="F" )
+
+shots_group_ev_F <- shots_ev_F %>% group_by( season, session_id, game_id4, start_cum, our_ha=ha,
+                                             event_team, shotcolor, shot, shooter, attribute, comment ) %>% 
+  summarise(
+                  F_id_h_list  = list( id[ player_ha=="H"] ),
+                  F_h_list     = list( last_name[ player_ha=="H"] ),
+                  F_id_a_list  = list( id[ player_ha=="A"] ),
+                  F_a_list     = list( last_name[ player_ha=="A"] )
+) 
+  
+our_shots_F <- shots_group_ev_F %>% 
+mutate(
+  our_F_id_list = ifelse( our_ha=="H", F_id_h_list, F_id_a_list ),
+  our_F_list    = ifelse( our_ha=="H", F_h_list,    F_a_list ),
+  our_F_ids   = paste( our_F_id_list %>% unlist(), collapse=" " ),
+  our_F_names = paste( our_F_list %>% unlist(), collapse=" " ),
+  our_num_F = our_F_list %>% unlist() %>% length()
+) 
+```
+
+```{r chances by line}
+chances_summary <- our_shots_F %>% ungroup() %>% 
+        group_by( our_F_ids ) %>% 
+        summarise(
+                  cf = sum( event_team == our_team_short ),
+                  ca = sum( event_team != our_team_short ),
+                  c_net = cf-ca,
+                  ff = sum( event_team == our_team_short & shot != "BLOCK" ),
+                  fa = sum( event_team != our_team_short & shot != "BLOCK" ),
+                  f_net = ff-fa,
+                  ff_pct   = round( ff / (ff + fa ), 3 ),
+                  cf_pct   = round( cf / (cf + ca ), 3 ),
+                  green_f = sum( (event_team == our_team_short) & (shot != "BLOCK") & (shotcolor=="GREEN") ),
+                  green_a = sum( (event_team != our_team_short) & (shot != "BLOCK") & (shotcolor=="GREEN") ),
+                  green_net = green_f - green_a,
+                  green_f_pct = round( green_f / (green_f + green_a ), 3 ),
+                  blue_f = sum( (event_team == our_team_short) & (shot != "BLOCK") & (shotcolor=="BLUE") ),
+                  blue_a = sum( (event_team != our_team_short) & (shot != "BLOCK") & (shotcolor=="BLUE") ),
+                  blue_net = blue_f - blue_a,
+                  blue_f_pct = round( blue_f / (blue_f + blue_a ), 3 ),
+                  greenblue_f = green_f + blue_f,
+                  greenblue_a = green_a + blue_a,
+                  greenblue_net = greenblue_f - greenblue_a,
+                  greenblue_f_pct = round( greenblue_f / (greenblue_f + greenblue_a ), 3 )
+                  
+        )
+
+```
+
+```{r combine}
+our_F_stats <- our_F_lines %>% 
+                left_join( fac_summary %>% ungroup(),  by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
+                left_join( pen_summary %>% ungroup(),  by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
+                left_join( shot_summary %>% ungroup(), by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
+                left_join( chances_summary %>% ungroup(), by=c( "ids"="our_F_ids" )) 
+
+our_F_stats <- our_F_stats %>% mutate(
+                cf_60 = round( cf / toi * 60, 3 ),
+                ca_60 = round( ca / toi * 60, 3 ),
+                c_net_60 = round( c_net / toi * 60, 3 ),
+                green_f_60 = round( green_f / toi * 60, 3 ),
+                green_a_60 = round( green_a / toi * 60, 3 ),
+                green_net_60 = round( green_net / toi * 60, 3 ),
+                blue_f_60 = round( blue_f / toi * 60, 3 ),
+                blue_a_60 = round( blue_a / toi * 60, 3 ),
+                blue_net_60 = round( blue_net / toi * 60, 3 ),
+                greenblue_f_60 = round( greenblue_f / toi * 60, 3 ),
+                greenblue_a_60 = round( greenblue_a / toi * 60, 3 ),
+                greenblue_net_60 = round( greenblue_net / toi * 60, 3 ),
+                pen_diff_60     = round( pen_diff / toi * 60, 3 )
+  
+  
+)
+
+write_csv( our_F_stats, path=paste0(fig_dir, "/f_lines/njd_f_lines.csv" ) )
+
 ```
 
 
+```{r glimpse}
+our_lines <- our_F_stats %>% filter( toi > 30 )
+
+p.lines <- ggplot( our_lines, aes( cf_pct, cf_pct_nhl ))
+p.lines + geom_point() + 
+          geom_abline( intercept=0,slope=1) +  
+          coord_fixed() + geom_smooth(method="lm", se=F)
+
+p.lines <- ggplot( our_lines, aes( ff_pct, ff_pct_nhl ))
+p.lines + geom_point() + 
+          geom_abline( intercept=0,slope=1) +  
+          coord_fixed() + geom_smooth(method="lm", se=F)
+
+p.lines <- ggplot( our_lines  %>% filter( toi > 50 ), aes( cf_pct, green_f_pct ))
+p.lines + geom_point(aes(size=toi)) + 
+          geom_vline( xintercept=0.5) +
+          geom_hline( yintercept=0.5) +
+          geom_text(aes(label=names), nudge_y=0.01 ) +
+          geom_abline( intercept=0,slope=1) +
+           geom_smooth(se=F) + coord_fixed()
+
+p.lines <- ggplot( our_lines  %>% filter( toi > 50 ), aes( cf_pct, blue_f_pct ))
+p.lines + geom_point(aes(size=toi)) + 
+          geom_vline( xintercept=0.5) +
+          geom_hline( yintercept=0.5) +
+          geom_text(aes(label=names) ) +
+          geom_abline( intercept=0,slope=1) +
+           geom_smooth(se=F) + coord_fixed()
+
+p.lines <- ggplot( our_lines  %>% filter( toi > 50 ), aes( green_f_pct, blue_f_pct ))
+p.lines + geom_point(aes(size=toi)) +
+          geom_vline( xintercept=0.5) +
+          geom_hline( yintercept=0.5) +
+          geom_text(aes(label=names), nudge_y=0.01 ) +
+          geom_abline( intercept=0,slope=1) +
+           geom_smooth(se=F) + coord_fixed()
+
+
+p.lines <- ggplot( our_lines  %>% filter( toi > 50 ), aes( cf_pct, greenblue_f_pct ))
+p.lines + geom_point(aes(size=toi)) + 
+          geom_abline( intercept=0,slope=1) +  
+           geom_smooth(se=F) + coord_fixed()
+
+p.lines <- ggplot( our_lines, aes( zs_o_pct, green_f_pct ))
+p.lines + geom_point(aes(size=toi)) + 
+          geom_text( aes(label=names))
+
+p.lines <- ggplot( our_lines %>% filter( str_detect(names, "O'Neill")), aes( cf_pct_nhl, cf_pct ))
+p.lines + geom_point(aes(size=toi)) + 
+          geom_text( aes(label=names))
+
+our_lines %>% filter( str_detect(names, "Gionta")) %>% select( names, toi, cf_pct, cf_pct_nhl, green_f_pct, green_net_60)
+```
 
 
 
