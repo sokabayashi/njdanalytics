@@ -113,6 +113,7 @@ max_game_number <- max( shots_tbl$game_number )
 num_games <- max_game_number - min_game_number + 1
 # this_game_number <- 10 # only useful when debugging
 
+shots_all_df   <- vector( "list", num_games ) # Store all shots_tbl with augmented info
 player_chances <- vector( "list", num_games ) # Store all player results
 pair_chances   <- vector( "list", num_games ) # Store all player-pair results
 
@@ -400,17 +401,19 @@ for( this_game_number in game_numbers ) {
 
     # ha_number, nhl_id, last_name, team_short
   player_chances[[this_game_number]] <- njd_chances_toi
+  shots_all_df[[this_game_number]] <- shots_df
 
 } # for loop through games
 
 player_chances_df <- do.call("rbind", player_chances )
 pair_chances_df   <- do.call("rbind", pair_chances )
+shots_all_df      <- do.call("rbind", shots_all_df )
 
 njd_players_by_game   <- player_chances_df %>% filter( team_short=="NJD" ) %>%
                           left_join( player_tbl %>% select( nhl_id, position_fd, number ), by="nhl_id" )
 
 shots_tbl$event_team <- ifelse( shots_tbl$event_team=="TB", "TBL", shots_tbl$event_team )
-save( njd_games, shots_tbl, player_chances_df, njd_players_by_game, pair_chances_df,
+save( njd_games, shots_all_df, player_chances_df, njd_players_by_game, pair_chances_df,
       file=paste0( nhl_dir$shot, "/njd_through_", this_game_number, ".RData" ) )
 load( file=paste0( nhl_dir$shot, "/njd_through_", this_game_number, ".RData" ))
 
