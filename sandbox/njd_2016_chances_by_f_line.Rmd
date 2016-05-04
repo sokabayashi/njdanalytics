@@ -62,6 +62,8 @@ pbp          <- stage_playbyplay %>%
                           filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
 stage_game   <- stage_game %>% 
                           filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+stage_roster <- stage_roster %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
 
 # 21.9k rows in our shift interval
 stage_shift_interval <- stage_shift_interval %>%
@@ -118,12 +120,12 @@ mutate(
 ```{r our F toi summary}
 # Total EV5on5 TOI for season
 # 3874 agrees with our D-men analysis
-season_total_toi_ev <- our_shift_interval %>% ungroup() %>% summarise( toi=sum(duration) ) %>% unlist(use.names = F)
+season_total_toi_ev <- our_shift_interval_F %>% ungroup() %>% summarise( toi=sum(duration) ) %>% unlist(use.names = F)
 season_total_toi_ev
 # back of the envelope
 82 * 48
 
-our_F_summary <- our_shift_interval %>% ungroup() %>% group_by( our_F_ids, our_F_names ) %>% 
+our_F_summary <- our_shift_interval_F %>% ungroup() %>% group_by( our_F_ids, our_F_names ) %>% 
             summarise( toi=sum(duration) ) %>% ungroup() %>% arrange( desc( toi )) %>% filter( toi > 0 ) %>% 
             mutate( toi_pct = round( toi/season_total_toi_ev*100,2 ) )
 
@@ -231,11 +233,11 @@ pen_df <- our_pbp_F %>% ungroup() %>% filter( event_type=="PENL" )
 pen_summary <- pen_df %>% 
                   group_by( our_F_ids, our_F_names ) %>% 
                   summarize( 
-                    player_or = our_F_list %>% unlist() %>% str_to_upper(),
-                    pen      = sum( event_player1_name %in% player_or ),
-                    pen_draw = sum( event_player2_name %in% player_or ),
-                    # pen      = sum( event_team == our_team_short ),
-                    # pen_draw = sum( event_team != our_team_short ),
+                    # player_or = our_F_list %>% unlist() %>% str_to_upper(),
+                    # pen      = sum( event_player1_name %in% player_or ),
+                    # pen_draw = sum( event_player2_name %in% player_or ),
+                    pen      = sum( event_team == our_team_short ),
+                    pen_draw = sum( event_team != our_team_short ),
                     pen_diff = pen_draw - pen
                     ) %>% ungroup() %>% arrange( desc(pen_diff))
 
@@ -261,6 +263,19 @@ shot_summary <- shot_df %>%
                     cf_pct_nhl   = round( cf_nhl / (cf_nhl + ca_nhl ), 3 )
                     ) %>% ungroup()
 ```
+
+```{r goals}
+goals_df <- our_pbp_F %>% ungroup() %>% filter( event_type %in% c( "GOAL") ) 
+
+goals_summary <- goals_df %>% 
+                  group_by( our_F_ids, our_F_names ) %>% 
+                  summarize( 
+                    gf = sum( event_team == our_team_short ),
+                    ga = sum( event_team != our_team_short ),
+                    gf_pct = round( gf / (gf + ga ), 3 )
+                    ) %>% ungroup()
+```
+
 
 ```{r gio check NHL}
 gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Gionta"))
@@ -351,6 +366,7 @@ our_F_stats <- our_F_lines %>%
                 left_join( fac_summary %>% ungroup(),  by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
                 left_join( pen_summary %>% ungroup(),  by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
                 left_join( shot_summary %>% ungroup(), by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
+                left_join( goals_summary %>% ungroup(), by=c( "ids"="our_F_ids", "names"="our_F_names" )) %>% 
                 left_join( chances_summary %>% ungroup(), by=c( "ids"="our_F_ids" )) 
 
 our_F_stats <- our_F_stats %>% mutate(
@@ -371,7 +387,7 @@ our_F_stats <- our_F_stats %>% mutate(
   
 )
 
-write_csv( our_F_stats, path=paste0(fig_dir, "/f_lines/njd_f_lines.csv" ) )
+write_csv( our_F_stats, path=paste0(fig_dir, "/njd_f_lines.csv" ) )
 
 ```
 
