@@ -1,10 +1,11 @@
 library(dplyr)
 lottery_odds <- data_frame(
   finish = 30:17, # 30th last, 17th just missed playoffs
-  p    = c( 0.2, 0.135, 0.115, 0.095, 0.085, 0.075, 0.065, 0.06, 0.05, 0.035, 0.030, 0.025, 0.020, 0.01 ) # new for 2016 draft
+  # p    = c( 0.2, 0.135, 0.115, 0.095, 0.085, 0.075, 0.065, 0.06, 0.05, 0.035, 0.030, 0.025, 0.020, 0.01 ) # new for 2016 draft
+  p    = c( 0.11, 0.115, 0.12, 0.125, 0.105, 0.09, 0.07, 0.065, 0.055, 0.04, 0.035, 0.03, 0.025, 0.015 ) # new for 2016 draft
 )
 
-num_draws <- 100e3
+num_draws <- 500e3
 results <- vector( "list", num_draws )
 for( draw in 1:num_draws ) {
   # only first 3 picks are lotteried without replacement.
