@@ -7,7 +7,7 @@ fontsize: 10pt
 
 ```{r Setup knitr, include=FALSE}
 
-knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec = ",")
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=TRUE, OutDec = ",")
 ```
 
 ```{r Load db and RData, include=F}
@@ -63,7 +63,10 @@ pbp          <- stage_playbyplay %>%
 stage_game   <- stage_game %>% 
                           filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
 stage_roster <- stage_roster %>% 
-                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% 
+                          collect() %>% mutate(
+                            position_fd = ifelse( position=="G", "G", ifelse( position=="D", "D", "F") )
+                          )
 
 # 21.9k rows in our shift interval
 stage_shift_interval <- stage_shift_interval %>%
@@ -75,8 +78,24 @@ stage_shift_interval <- stage_shift_interval %>%
 shift_interval_spread <- stage_shift_interval %>% 
     left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) ) %>% 
     mutate(
-      ev5on5    = ifelse( num_skaters_h==5 & num_goalies_h==1 & num_skaters_a==5 & num_goalies_a==1, TRUE, FALSE )
+      ev5on5    = ifelse( num_skaters_h==5 & num_goalies_h==1 & num_skaters_a==5 & num_goalies_a==1, TRUE, FALSE ),
+      our_num_players   = ifelse( our_ha=="H", num_players_h, num_players_a ),
+      their_num_players = ifelse( our_ha=="H", num_players_a, num_players_h ),
+      our_num_skaters   = ifelse( our_ha=="H", num_skaters_h, num_skaters_a ),
+      our_num_goalies   = ifelse( our_ha=="H", num_goalies_h, num_goalies_a ),
+      their_num_skaters = ifelse( our_ha=="H", num_skaters_a, num_skaters_h ),
+      their_num_goalies = ifelse( our_ha=="H", num_goalies_a, num_goalies_h ),
+      strength          = ifelse( our_num_players > their_num_players, "pp", 
+                           ifelse( our_num_players < their_num_players, "sh", "ev" ) ),
+      skater_count = paste0( our_num_skaters, "on", their_num_skaters ),
+      skater_count = ifelse( !our_num_goalies, paste0( skater_count, "_our_en"),
+                        ifelse( !their_num_goalies, paste0( skater_count, "_their_en"), skater_count ) )
     )
+
+# CHECK
+shift_interval_spread %>% group_by( #our_num_skaters, their_num_skaters, our_num_goalies, their_num_goalies, 
+                                  strength, skater_count ) %>% summarise( toi=sum(duration) ) %>% ungroup() %>% 
+                          arrange( desc(toi)) %>% as.data.frame()
 
 # Gather away_p1_id - home_p6_id columns and convert to rows.
 # Each unique time interval with then have multiple rows, one for each on ice player.
@@ -90,12 +109,12 @@ shift_interval_gather <- shift_interval_spread %>% gather( player_label, player_
 
 # Drop extra columns
 # sorting by ID by team ensures unique line representation when we then push into lists
-shift_interval_ev <- shift_interval_gather %>% 
+shift_interval <- shift_interval_gather %>% 
     select( -starts_with("away_player"), -starts_with("home_player"), 
             -starts_with( "on_ice"), -ends_with("_skaters"), -ends_with( "_goalie") ) %>% ungroup() %>% 
     arrange( game_date, start_cum, player_ha, desc(position_fd), player_id ) 
   
-shift_interval_group_F_ev <- shift_interval_ev %>% 
+shift_interval_group_F_ev <- shift_interval %>% 
     filter( ev5on5, position_fd=="F" ) %>% 
     group_by( game_date, season, session_id, game_id4, period, start_cum, duration, our_ha ) %>% 
     summarise(
@@ -115,6 +134,45 @@ mutate(
   our_F_names = paste( our_F_list %>% unlist(), collapse=" " )
 ) 
     
+shift_interval_group_pp <- shift_interval %>% 
+    filter( strength=="pp", position_fd != "G" ) %>% 
+    group_by( game_date, season, session_id, game_id4, skater_count, period, start_cum, duration, our_ha ) %>% 
+    summarise(
+                    num_h = sum( player_ha=="H" ),
+                    num_a = sum( player_ha=="A" ),
+                    id_h_list   = list( player_id[ player_ha=="H"] ),
+                    name_h_list = list( last_name[ player_ha=="H"] ),
+                    id_a_list   = list( player_id[ player_ha=="A"] ),
+                    name_a_list = list( last_name[ player_ha=="A"] )
+) 
+  
+our_shift_interval_pp <- shift_interval_group_pp %>% 
+mutate(
+  our_id_list   = ifelse( our_ha=="H", id_h_list, id_a_list ),
+  our_name_list = ifelse( our_ha=="H", name_h_list, name_a_list ),
+  our_ids   = paste( our_id_list %>% unlist(), collapse=" " ),
+  our_names = paste( our_name_list %>% unlist(), collapse=" " )
+) 
+
+shift_interval_group_F_pp <- shift_interval %>% 
+    filter( strength=="pp", skater_count=="5on4", position_fd=="F" ) %>% 
+    group_by( game_date, season, session_id, game_id4, period, start_cum, duration, our_ha ) %>% 
+    summarise(
+                    num_F_h = sum( player_ha=="H" ),
+                    num_F_a = sum( player_ha=="A" ),
+                    F_id_h_list  = list( player_id[ player_ha=="H"] ),
+                    F_h_list     = list( last_name[ player_ha=="H"] ),
+                    F_id_a_list  = list( player_id[ player_ha=="A"] ),
+                    F_a_list     = list( last_name[ player_ha=="A"] )
+  ) 
+  
+our_shift_interval_F_pp <- shift_interval_group_F_pp %>% 
+mutate(
+  our_F_id_list = ifelse( our_ha=="H", F_id_h_list, F_id_a_list ),
+  our_F_list    = ifelse( our_ha=="H", F_h_list,    F_a_list ),
+  our_F_ids   = paste( our_F_id_list %>% unlist(), collapse=" " ),
+  our_F_names = paste( our_F_list %>% unlist(), collapse=" " )
+) 
 ```
 
 ```{r our F toi summary}
@@ -134,40 +192,120 @@ our_F_summary
 our_F_lines <- our_F_summary %>% select( ids=our_F_ids, names=our_F_names, toi )
 ```
 
+```{r our PP toi summary}
+# Total 5on4 TOI for season
+# 256 opportunities.  say 1.6 min
+season_total_toi_pp <- our_shift_interval_pp %>% ungroup() %>% group_by(skater_count) %>% 
+                        summarise( toi=sum(duration) ) %>% arrange( desc(toi) )
+season_total_toi_pp
+# back of the envelope: PPO x pp time
+256 * 1.6
+
+# Focus on 5on4
+season_total_toi_5on4 <- season_total_toi_pp %>% filter( skater_count=="5on4" ) %>% select( toi ) %>% unlist()
+
+
+our_pp_summary <- our_shift_interval_pp %>% ungroup() %>% 
+            filter( skater_count=="5on4") %>% group_by( our_ids, our_names ) %>% 
+            summarise( toi=sum(duration) ) %>% ungroup() %>% arrange( desc( toi )) %>% filter( toi > 0 ) %>% 
+            mutate( toi_pct = round( toi/season_total_toi_5on4*100,2 ) )
+our_pp_summary_F <- our_shift_interval_F_pp %>% ungroup() %>% 
+            group_by( our_F_ids, our_F_names ) %>% 
+            summarise( toi=sum(duration) ) %>% ungroup() %>% arrange( desc( toi )) %>% filter( toi > 0 ) %>% 
+            mutate( toi_pct = round( toi/season_total_toi_5on4*100,2 ) )
+
+pp_toi_cutoff <- 0 # gives 13 units
+our_pp_summary %>% select( -our_ids ) %>% filter( toi > pp_toi_cutoff )
+
+our_pp_lines <- our_pp_summary %>% select( ids=our_ids, names=our_names, toi ) %>% filter( toi > pp_toi_cutoff )
+our_pp_lines
+
+our_pp_lines %>% filter( str_detect( names, "Henrique" ) )
+
+
+our_pp_lines_F <- our_pp_summary_F %>% select( ids=our_F_ids, names=our_F_names, toi, toi_pct ) %>% filter( toi > pp_toi_cutoff )
+our_pp_lines_F
+
+
+# individual PP TOI %
+our_players_pp_toi <- shift_interval %>% filter( strength=="pp", player_ha==our_ha ) %>% 
+  group_by( player_id, last_name, skater_count ) %>% 
+  summarise(
+  toi = sum(duration)
+) %>% ungroup() %>% arrange( desc(toi) ) %>% filter( toi > pp_toi_cutoff )
+
+our_players_pp_toi$last_name <- factor( our_players_pp_toi$last_name, levels=rev(unique(our_players_pp_toi$last_name ) ) )
+  
+our_players_pp_toi %>% slice( 1:15)
+```
+
+```{r PP TOI}
+p.toi <- ggplot( our_players_pp_toi, aes(last_name, toi))
+p.toi + geom_point() + coord_flip()
+```
+
+
 ```{r pbp nest}
 event_types_study <- c( "FAC", "BLOCK", "MISS", "SHOT", "GOAL", "PENL"  ) # , "ICING",  "OFFSIDE", "PENL"
 
 pbp_spread <- pbp %>% 
-    filter( event_type %in% event_types_study ) %>% select( -id, -xcoord, -ycoord, -event_length ) %>% distinct() %>% 
+    filter( event_type %in% event_types_study, home_skater_cnt >=4, away_skater_cnt >=4 ) %>% 
+    select( -id, -xcoord, -ycoord, -event_length ) %>% distinct() %>% 
     left_join( our_games %>% select( season, game_id4, our_ha=ha ), by=c( "season", "game_id4" ) )
+pbp_spread <- pbp_spread %>% 
+  mutate(
+    our_num_players   = ifelse( our_ha=="H", home_skater_cnt, away_skater_cnt ),
+    their_num_players = ifelse( our_ha=="H", away_skater_cnt, home_skater_cnt ),
+    our_en            = ifelse( our_ha=="H", is.na(home_goalie), is.na(away_goalie) ),
+    their_en          = ifelse( our_ha=="H", is.na(away_goalie), is.na(home_goalie) ),
+    our_num_skaters   = ifelse( !our_en,   our_num_players-1,   our_num_players ),
+    their_num_skaters = ifelse( !their_en, their_num_players-1, their_num_players ),
+    strength          = ifelse( our_num_players > their_num_players, "pp", 
+                         ifelse( our_num_players < their_num_players, "sh", "ev" ) ),
+    skater_count = paste0( our_num_skaters, "on", their_num_skaters ),
+    skater_count = ifelse( our_en, paste0( skater_count, "_our_en"),
+                        ifelse( their_en, paste0( skater_count, "_their_en"), skater_count ) )
+  )
+
+# CHECK
+pbp_spread %>% select( our_num_skaters, their_num_skaters, our_en, their_en, strength, skater_count ) %>% 
+  group_by( strength, skater_count, our_en, their_en ) %>% summarise( count=n() ) %>% ungroup() %>% arrange( desc(count)) 
+
+# PP Goal strength
+pbp_spread  %>% filter( event_type=="GOAL", event_team=="NJD", our_pp )  %>% select( pp_type)  %>% unlist()  %>% table
+
 
 pbp_gather <- pbp_spread %>% 
                 gather( player_label, player_id, away_p1_id:home_p6_id ) %>% 
                           filter( !is.na(player_id) ) %>% 
-                          left_join(
-                            player_tbl %>% select( nhl_id, last_name, position_fd ), by=c( "player_id"="nhl_id" )
-                          ) %>% mutate(
-                            player_ha = ifelse( grepl( "home", player_label ), "H", "A" )
-                          ) 
+                          left_join( stage_roster %>% 
+                              select( season, session_id, game_id4, 
+                                      ha_number, nhl_id, last_name, 
+                                      position_fd, player_team_short=team_short, player_ha=team_ha ), 
+                            by = c( "season", "session_id", "game_id4", player_id = "nhl_id" )
+                          )
+
 pbp_gather <- pbp_gather %>% left_join(
-                stage_roster %>% select( season, session_id, game_id4, ha_number, event_player1_name=last_name ), 
+                stage_roster %>% select( season, session_id, game_id4, 
+                                         ha_number, event_player1_name=last_name, event_player1_fd=position_fd ), 
                 by = c( "season", "session_id", "game_id4", event_player1 = "ha_number" )
 ) %>% left_join(
-                stage_roster %>% select( season, session_id, game_id4, ha_number, event_player2_name=last_name ), 
+                stage_roster %>% select( season, session_id, game_id4, 
+                                          ha_number, event_player2_name=last_name,  event_player2_fd=position_fd ), 
                 by = c( "season", "session_id", "game_id4", event_player2 = "ha_number" )
 )
 
 
 # Drop extra columns
 # sorting by ID by team ensures unique line representation when we then push into lists
-pbp_ev <- pbp_gather %>% 
-    select( -starts_with("away_player"), -starts_with("home_player"), 
+pbp_multi <- pbp_gather %>% 
+    select( -season, -session_id, -starts_with("away_player"), -starts_with("home_player"), 
             -starts_with( "on_ice"), -ends_with("_skaters"), -ends_with( "_goalie") ) %>% 
     arrange( game_date, start_cum, player_ha, desc(position_fd), player_id ) 
   
-pbp_group_F_ev <- pbp_ev %>% 
+pbp_group_F_ev <- pbp_multi %>% 
     filter( ev5on5, position_fd=="F" ) %>% 
-    group_by( game_date, season, session_id, game_id4, period, start_cum, our_ha, 
+    group_by( game_date, game_id4, period, start_cum, our_ha, 
               event_type, etext, event_team, event_team_ha, homezone, event_player1_name, event_player2_name ) %>% 
     summarise(
                     num_F_h = sum( player_ha=="H" ),
@@ -190,7 +328,6 @@ mutate(
 
 our_pbp_F <- our_pbp_F %>% select( -starts_with( "num") )
 
-
 exclude_pbp_F <- pbp_group_F_ev %>% 
 mutate(
   our_F_id_list = ifelse( our_ha=="H", F_id_h_list, F_id_a_list ),
@@ -200,6 +337,35 @@ mutate(
 ) %>% filter(
   !our_F_ids %in% our_F_lines$ids
 )
+```
+
+```{r PP pbp}
+pbp_group_pp <- pbp_multi %>% 
+    filter( strength=="pp" ) %>% 
+    group_by( game_date, game_id4, period, start_cum, our_ha, 
+              event_type, etext, event_team, event_team_ha, homezone, event_player1_name, event_player2_name, skater_count) %>% 
+    summarise(
+                    num_h = sum( player_ha=="H" ),
+                    num_a = sum( player_ha=="A" ),
+                    id_h_list   = list( player_id[ player_ha=="H"] ),
+                    name_h_list = list( last_name[ player_ha=="H"] ),
+                    id_a_list   = list( player_id[ player_ha=="A"] ),
+                    name_a_list = list( last_name[ player_ha=="A"] )
+) 
+  
+our_pbp_pp <- pbp_group_pp %>% 
+mutate(
+  our_id_list   = ifelse( our_ha=="H", id_h_list, id_a_list ),
+  our_name_list = ifelse( our_ha=="H", name_h_list,    name_a_list ),
+  our_ids       = paste( our_id_list %>% unlist(), collapse=" " ),
+  our_names     = paste( our_name_list %>% unlist(), collapse=" " )
+) %>% filter(
+  # our_ids %in% our_pp_lines$ids
+)
+
+our_pbp_pp <- our_pbp_pp %>% select( -starts_with( "num") )
+
+
 
 ```
 
@@ -246,7 +412,24 @@ pen_df %>% filter( str_detect( our_F_names, "Palmieri")) %>% summarize(
                     pen_draw = sum( event_player2_name  == "PALMIERI", na.rm=T ),
                     pen_diff = pen_draw - pen
 )
+
+pen_all_df <- pbp %>% filter( event_type=="PENL" )
+pen_df     <- pen_all_df %>% filter( event_team==our_team_short ) %>% group_by( event_p1_id ) %>% 
+                summarise( pen=n() ) %>% 
+                left_join( player_tbl %>% select(nhl_id, last_name ), by=c( "event_p1_id"="nhl_id") ) %>% 
+                ungroup() %>% arrange( desc(pen))
+
+pen_draw_df  <- pen_all_df %>% filter( event_team!=our_team_short ) %>% group_by( event_p2_id ) %>% 
+                summarise( pen_draw=n() ) %>% 
+                left_join( player_tbl %>% select(nhl_id, last_name ), by=c( "event_p2_id"="nhl_id") ) %>% 
+                ungroup() %>% arrange( desc(pen_draw))
+
+pen_combined <- pen_df %>% left_join( pen_draw_df %>% select(-last_name), by=c( "event_p1_id"="event_p2_id")) %>% 
+                mutate( pen_diff = pen_draw - pen ) %>% arrange( desc(pen_diff))
+
+write_csv( pen_combined, path=paste0( fig_dir, "/pen_draw.csv" ) )
 ```
+
 
 
 ```{r corsi}
@@ -262,6 +445,57 @@ shot_summary <- shot_df %>%
                     ff_pct_nhl   = round( ff_nhl / (ff_nhl + fa_nhl ), 3 ),
                     cf_pct_nhl   = round( cf_nhl / (cf_nhl + ca_nhl ), 3 )
                     ) %>% ungroup()
+```
+
+```{r PP corsi by line}
+shot_pp_df <- our_pbp_pp %>% ungroup() %>% filter( event_type %in% c( "BLOCK", "MISS", "SHOT", "GOAL") ) 
+
+shot_pp_summary <- shot_pp_df %>% 
+                  group_by( our_ids, our_names, skater_count ) %>% 
+                  summarize( 
+                    cf_nhl = sum( event_team == our_team_short ),
+                    ff_nhl = sum( event_team == our_team_short & event_type != "BLOCK" ),
+                    gf     = sum( event_team == our_team_short & event_type == "GOAL" ),
+                    ga     = sum( event_team != our_team_short & event_type == "GOAL" )
+
+                    ) %>% ungroup() %>% arrange( desc(ff_nhl ))
+
+pp_summary <- shot_pp_summary %>% left_join( our_pp_lines, by=c( "our_ids"="ids" ) ) %>% 
+                      mutate(
+                        ff_nhl_60 = round( ff_nhl / toi * 60, 3 ),
+                        gf_nhl_60 = round( gf     / toi * 60, 3 )
+                      ) %>% select( -our_ids ) %>% arrange( desc(gf_nhl_60) )
+
+# pp5on4_summary %>% View
+```
+
+```{r PP corsi individual}
+shot_player_df <- pbp_multi %>% filter( event_type %in% c( "BLOCK", "MISS", "SHOT", "GOAL") ) 
+
+shot_player_df <- shot_player_df %>% filter( player_team_short=="NJD" ) %>% 
+                  group_by( player_id, last_name, position_fd, strength, skater_count ) %>% 
+                  summarize( 
+                    cf_nhl = sum( event_team == our_team_short ),
+                    ca_nhl = sum( event_team != our_team_short ),
+                    ff_nhl = sum( event_team == our_team_short & event_type != "BLOCK" ),
+                    fa_nhl = sum( event_team != our_team_short & event_type != "BLOCK" ),
+                    gf_nhl = sum( event_team == our_team_short & event_type == "GOAL" ),
+                    ga_nhl = sum( event_team != our_team_short & event_type == "GOAL" ),
+                    ff_pct_nhl   = round( ff_nhl / (ff_nhl + fa_nhl ), 3 ),
+                    cf_pct_nhl   = round( cf_nhl / (cf_nhl + ca_nhl ), 3 ),
+                    gf_pct_nhl   = round( gf_nhl / (gf_nhl + ga_nhl ), 3 )
+                    ) %>% ungroup()
+
+shot_player_df <- shot_player_df %>% left_join( our_players_pp_toi %>% select( player_id, skater_count, toi ),
+                                                by=c( "player_id", "skater_count" ) )
+
+shot_player_df <- shot_player_df %>% mutate(
+                        ff_nhl_60 = round( ff_nhl / toi * 60, 3 ),
+                        gf_nhl_60 = round( gf_nhl / toi * 60, 3 )
+)
+
+shot_player_df %>% filter( strength=="pp", skater_count=="5on4" ) %>% select( -ca_nhl, -fa_nhl, -contains( "pct") ) %>%  View
+
 ```
 
 ```{r goals}
@@ -290,6 +524,11 @@ gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Gionta"), str_detect(
 gionta_df <- shot_df %>% filter( str_detect( our_F_names, "Kennedy"), str_detect( our_F_names, "Josefson"), str_detect( our_F_names, "Kalinin") )
 (gionta_df$event_team=="NJD") %>% table() %>% prop.table()
 ```
+
+
+
+
+
 
 ```{r chances clean up}
 
@@ -330,6 +569,42 @@ mutate(
   our_F_names = paste( our_F_list %>% unlist(), collapse=" " ),
   our_num_F = our_F_list %>% unlist() %>% length()
 ) 
+```
+
+```{r PP chances}
+# 5on4 chances
+chances_5on4 <- shots_all %>% filter( strength=="PP 5v4", shot != "BLOCK", team_short=="NJD", event_team=="NJD" ) 
+
+chances_5on4_summary <- chances_5on4 %>% group_by( id, last_name ) %>% 
+                        summarise(
+                          ff = n(), # Blocks already filtered out, as are all opponent shota ttempts
+                          green_f = sum( shotcolor=="GREEN" ),
+                          blue_f  = sum( shotcolor=="BLUE" )
+                        )
+
+pp_player_df <- shot_player_df %>% filter( strength=="pp", skater_count=="5on4" ) %>% 
+                            select( -ca_nhl, -fa_nhl, -contains( "pct") ) %>%  
+                            left_join( chances_5on4_summary %>% select(-last_name), by=c( "player_id"="id" ) ) %>% 
+                             mutate(
+                              ff_60 = round( ff / toi * 60, 3 ),
+                              green_60 = round( green_f / toi * 60, 3 ),
+                              blue_60 = round( blue_f / toi * 60, 3 ),
+                              greenblue_60 = green_60 + blue_60
+)
+
+player_games_played <- stage_roster %>% filter( team_short=="NJD" ) %>% group_by( nhl_id, last_name ) %>% 
+                        summarise( game=n() ) %>% ungroup()
+
+pp_write <- pp_player_df %>% filter( toi > 10 ) %>% 
+            left_join( player_games_played %>% select( player_id=nhl_id, game), by="player_id" ) %>% 
+            mutate(
+              pp_toi_gm = toi/game
+            ) %>% 
+            select( -player_id, -strength, -skater_count, -cf_nhl ) %>% 
+            select( last_name, position_fd, game, toi, pp_toi_gm, everything() ) %>% arrange( desc(position_fd), desc(pp_toi_gm))
+
+write_csv( pp_write, path = paste0( fig_dir, "/pp5on4.csv" ) )
+
 ```
 
 ```{r chances by line}
@@ -483,7 +758,27 @@ write_csv( defensemen_gp_ev, path=paste0(fig_dir, "/njd_d_pairs.csv" ))
 ```
 
 
+```{r h-r PP stats}
+njd_url <- "http://www.hockey-reference.com/teams/NJD/2016.html"
 
+njd_html <- njd_url %>% read_html()
+njd_summary <- njd_html %>% html_node( "#skaters" ) %>% html_table(header=F)
+names( njd_summary ) <- njd_summary[2,]
+njd_summary <- njd_summary[ -(1:2), ]
+
+njd_season_summary <- njd_summary %>% separate( Player, c( "first_name", "last_name"), sep = " " ) %>% rename(
+  g_pp = PPG,
+  g_sh = SHG,
+  a_ev = `EV.1`,
+  a_pp = PP,
+  a_sh = SH
+)
+
+our_players_pp_summary <- our_players_pp_toi %>% left_join( njd_season_summary %>% select( last_name, g_pp, a_pp ), by="last_name" )
+
+write_csv( our_players_pp_summary %>% filter( skater_count=="5on4"), path=paste0(fig_dir, "/njd_pp.csv" ))
+
+```
 
 
 
