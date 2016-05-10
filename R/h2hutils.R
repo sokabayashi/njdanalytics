@@ -52,13 +52,16 @@ get_linemates_by_game <- function(
   linemates_num_last_name <- top_linemates$num_last_name_2 %>% unique() # list of all linemates
 
   # Top linemates over full season.  Want to put TOI% in axislabel
+  # require at least 1% of TOI%
   linemates_season <- linemates %>% ungroup() %>% group_by( nhl_id_2, num_last_name_2 ) %>%
                                     summarise( toi = sum(toi) ) %>% ungroup() %>%
                                     mutate(
                                       toi_pct_total         = round( 100*(toi/max(toi)) ),
                                       num_last_name_2_label = paste0( num_last_name_2, "\n",
                                                               round(toi), " min (", toi_pct_total, "%)" )
-                                    ) %>% arrange( desc(toi) )
+                                    ) %>%
+                                    filter( toi_pct_total >= 1 ) %>% # must have at least 1% of TOI overlap
+                                    arrange( desc(toi) )
   linemates_season <- linemates_season %>% filter( num_last_name_2 %in% linemates_num_last_name )
   this_player_num_last_name_label <- linemates_season$num_last_name_2_label[1]
 
