@@ -1,0 +1,683 @@
+---
+title: "Power Play sustainability"
+geometry: margin=1cm
+output: html_document
+fontsize: 10pt
+---
+
+```{r Setup knitr, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=TRUE, OutDec = ",")
+```
+
+```{r Load db and RData, include=F}
+library( njdanalytics )
+
+nhl_db <- setup_nhl_db()
+player_tbl           <- tbl( nhl_db, "player"           ) %>% collect()
+team_score           <- tbl( nhl_db, "team_score"       )
+stage_game           <- tbl( nhl_db, "stage_game"       ) %>% collect()
+stage_roster         <- tbl( nhl_db, "stage_roster"     )
+stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay" )
+stage_shift_interval <- tbl( nhl_db, "stage_shift_interval" )
+game_player          <- tbl( nhl_db, "game_player"      )
+team_tbl             <- tbl( nhl_db, "team"             ) %>% collect()
+
+this_season     <- "20152016"
+this_session_id <- "2"
+
+# fig directory
+fig_dir <- paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/fig/" )
+
+#################################``########################################
+# MANUALLY UPDATE
+game_suffix <- 82
+
+#########################################################################
+
+# njd_games has game_number and game_id4 to join different data sources
+our_team_short  <- "NJD" # might change perspective for games we're not in?
+our_team_common <- team_tbl %>% filter( name_short==our_team_short ) %>% select( name_common ) %>% unlist( use.names = F )
+our_games       <- team_score %>% 
+                          filter( season==this_season, session_id==this_session_id, team_short==our_team_short) %>%
+                          collect() %>% arrange( game_date )
+our_games            <- add_team_score_label( our_games, our_team=our_team_short ) %>%
+                          select( game_date, game_number, season, session_id, game_id4, ha, opp_team_short, game_label )
+our_game_id4s        <- our_games$game_id4
+
+# njd_games, shots_all_df, player_chances_df, njd_players_by_game, pair_chances_df
+load( file=paste0( nhl_dir$shot, "/njd_through_", game_suffix, ".RData" ))
+```
+
+
+```{r analysis parameters}
+this_season     <- "20152016"
+this_session_id <- "2"
+```
+
+```{r db tables}
+rosters      <- stage_roster %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+pbp          <- stage_playbyplay %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+stage_game   <- stage_game %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+stage_roster <- stage_roster %>% 
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% 
+                          collect() %>% mutate(
+                            position_fd = ifelse( position=="G", "G", ifelse( position=="D", "D", "F") )
+                          )
+
+# 21.9k rows in our shift interval
+stage_shift_interval <- stage_shift_interval %>%
+                          filter( season==this_season, session_id==this_session_id, game_id4 %in% our_game_id4s ) %>% collect()
+```
+
+
+```{r hockey-reference}
+recent_season_ends <- 2006:2016
+recent_seasons <- paste0( recent_season_ends-1, recent_season_ends )
+num_seasons <- length( recent_seasons )
+
+standings <- vector( "list", num_seasons )
+for( i in 1:num_seasons ) {
+  recent_season <- recent_seasons[i]
+  message( "scrape season ", recent_season )
+  standings[[i]] <- scrape_season_standings( recent_season, team_tbl )  
+}
+standings_all <- do.call( "rbind", standings )
+
+```
+
+The Power Play% (Goals / Power Play Opportunities) is the standard method of evaluating a team's power play.  It makes sense--a successful power play should score goals.
+But, on further consideration, there are some issues here:
+- Length of power play.  Not all power plays are 2-minutes.  Many are a less than that, truncated by other penalties.
+- Different kinds.  While 5on4 power plays are by far the most common, there is no separate consideration for a 5on3, where the power play team is almost twice as likely score.  Similarly, no consideration for 6on4 or 4on3.
+- Goals vs chances.  A power play might be still be considered to be running well even if no goals are scored.  If a PP unit is consistently creating many scoring chances but no goals, there may be no need for change because eventually "the goals will come".
+
+```{r}
+standings_backup <- standings_all
+
+standings_all <- standings_all %>% 
+  filter( season_end != "2013" ) %>% mutate(
+  season_end = str_split( team_season, " " ) %>% pluck(2) %>% unlist(),
+  team_short = factor( team_short )
+)
+```
+
+```{r last year}
+standings_last <- standings_all %>% filter( season_end == 2016 ) %>% 
+                select( conference, team_season, season_end, team_short, pts, made_playoffs,
+                  ppo, gf_pp, pp_pct ) %>% arrange( desc(pp_pct))
+teams_sorted_last <- standings_last$team_short %>% as.character()
+standings_last$team_short <- factor( standings_last$team_short, levels=teams_sorted_last )
+
+standings_last_m <- standings_last %>% gather( metric, value, ppo:pp_pct )
+
+p.last <- ggplot( standings_last_m, aes(x=team_short, y=value ) )
+p.last + geom_point() + facet_grid( metric ~ ., scales="free_y")
+```
+
+
+```{r}
+# p.pp <- ggplot( standings_all, aes(x=season_end,y=pp_pct ) )
+# p.pp + geom_line( aes(group=team_short, color=team_short))
+
+standings_last3 <- standings_all %>% filter( season_end >= 2014 )
+standings_last3_avg <- standings_last3 %>% group_by( team_short ) %>% 
+                        summarise( pp_pct = mean(pp_pct),
+                                   ppo = mean(ppo),
+                                   ppg = mean(gf_pp)
+                          ) %>% arrange( desc( pp_pct ))
+teams_sorted <- standings_last3_avg$team_short %>% as.character()
+standings_last3$team_short <- factor( standings_last3$team_short, levels=teams_sorted_last )
+
+p.pp_pct <- ggplot( standings_last3, aes(x=team_short,y=pp_pct ) )
+p.pp_pct + geom_point(aes(alpha=season_end, color=season_end), size=4 ) +
+  scale_y_continuous( "PP%", breaks=seq(10,30,1) ) + xlab(NULL) +
+  theme_bw() + scale_color_few() + 
+  theme( text = element_text(size=9), legend.title=element_blank(),legend.position=c(0.9,0.8))
+ggsave( filename="sandbox/fig/pp_by_team.png", width=8,height=4)
+```
+
+```{r}
+pp_standings_recent <- standings_last3 %>% select( season_end, team_short, team_season, ppg_pct )
+
+pp_pct_yoy <- pp_standings_recent %>% filter( season_end=="2016" ) %>% 
+                  left_join( 
+                    pp_standings_recent %>% filter( season_end=="2015" ) %>% 
+                      select( team_short, season_end_l1=season_end,
+                      team_season_l1=team_season, ppg_pct_l1=ppg_pct ),
+                    by = "team_short"
+                    ) %>% 
+                  left_join( 
+                    pp_standings_recent %>% filter( season_end=="2014" ) %>% 
+                      select( team_short, season_end_l2=season_end,
+                      team_season_l2=team_season, ppg_pct_l2=ppg_pct ),
+                    by = "team_short"
+                    )
+
+summary( lm( data=pp_pct_yoy, ppg_pct ~ ppg_pct_l1 ) )
+
+summary( lm( data=pp_pct_yoy, ppg_pct_l1 ~ ppg_pct_l2 ) )
+```
+
+
+```{r}
+
+p.pp <- ggplot( standings_all, aes(x=season_end,y=ppo ) )
+p.pp + geom_boxplot()
+
+p.ppg <- ggplot( standings_all, aes(x=season_end,y=gf_pp ) )
+p.ppg + geom_boxplot()
+
+p.pp_pct <- ggplot( standings_all, aes(x=season_end,y=pp_pct ) )
+p.pp_pct + geom_boxplot()
+
+
+
+foo <- standings_all %>% mutate( season_end = season_end %>% as.numeric() )
+lm( pp_pct ~ season_end, data=foo ) %>% summary()
+
+lm( ppo ~ season_end, data=foo ) %>% summary()
+
+lm( gf_pp ~ season_end, data=foo ) %>% summary()
+
+```
+
+
+
+
+```{r totals}
+pp_labels <- c( "ppo"="PP Opportunities", "ppg"="PP Goals", "pp_pct"="PP%", "gf"="Goals" )
+pp_labeller <- function( variable, value ) {
+  return( pp_labels[value] )
+}
+
+ppo_total <- standings_all %>% group_by( season_end ) %>% 
+  summarise(
+    ppo = sum(ppo),
+    ppg = sum(gf_pp),
+    pp_pct = round(ppg/ppo*100,1)
+  )
+
+
+
+
+p.ppo <- ggplot( ppo_total %>% filter( season_end >=2009), aes(x=season_end,y=ppo, group=1))
+p.ppo + geom_line()
+
+p.ppo <- ggplot( ppo_total %>% filter( season_end >=2009), aes(x=season_end,y=ppg, group=1))
+p.ppo + geom_line()
+
+ppo_ppg <- ppo_total %>% gather( metric, count, ppo:pp_pct )
+ppo_ppg$metric <- factor( ppo_ppg$metric, levels=c( "ppo", "ppg", "pp_pct" ) )
+pp_labels <- c( "ppo"="PP Opportunities", "ppg"="PP Goals", "pp_pct"="PP%" )
+pp_labeller <- function( variable, value ) {
+  return( pp_labels[value] )
+}
+
+p.pp <- ggplot( ppo_ppg %>% filter(season_end >= 2008), aes(x=season_end, y=count) )
+p.pp + geom_line( aes(group=1,color=metric),size=1) + 
+  scale_y_continuous( "Count") +
+  facet_grid( metric ~ . , scales = "free_y", labeller=pp_labeller )+
+  theme_few() + theme( legend.position="none")
+    
+
+
+
+
+p.ppo <- ggplot( ppo_total %>% filter( season_end >=2009), aes(x=season_end,y=pp_pct, group=1))
+p.ppo + geom_line()
+
+p.ppg <- ggplot( ppo_total %>% filter( season_end >=2009), aes(x=ppo,y=ppg, group=1))
+p.ppg + geom_point()
+
+p.ppg <- ggplot( ppo_total %>% filter( season_end >=2005), aes(x=ppo,y=pp_pct, group=1))
+p.ppg + geom_point()
+
+
+```
+
+
+```{r}
+standings_recent <- standings_all %>% filter( season_end >= 2012, season_end != 2013 )
+
+p.ppg <- ggplot( standings_recent, aes(x=ppo, y=pp_pct, group=1))
+p.ppg + geom_point(aes(color=team_short)) + theme_few() +
+      geom_text( aes(label=team_season))
+
+
+```
+
+
+
+```{r}
+shiftinterval <- tbl( nhl_db, "stage_shift_interval" ) %>% filter( session_id=="2" ) %>% collect()
+
+
+```
+
+Goal scoring across the league is down.
+
+```{r}
+pp_labels <- c( "gf"="Goals", "ppo"="PP Opportunities", "ppg"="PP Goals", "pp_pct"="PP%", "ppg_pct"="PP share of Goals" )
+
+league_by_season <- standings_all %>% group_by( season_end ) %>% 
+                      summarise( gf=sum(gf), ppo=sum(ppo), ppg=sum(gf_pp), 
+                                pp_pct=round(ppg/ppo*100,1), ppg_pct=round(ppg/gf*100,1) )
+league_by_season_m <- league_by_season %>% gather( metric, value, gf:ppg_pct )
+league_by_season_m$metric <- factor( league_by_season_m$metric, levels=c( "gf", "ppo", "ppg", "ppg_pct", "pp_pct" ) )
+
+p.league <- ggplot( league_by_season_m %>% filter( metric %in% c( "gf", "ppo", "ppg" )), aes(x=season_end, y=value) )
+p.league + geom_line(aes(color=metric, group=1), size=1.5) + geom_point( aes(color=metric), size=3) + 
+  geom_text( aes(label=value, y=value*1.01), size=3 ) + 
+  facet_grid( metric ~ ., scales="free_y" , labeller=labeller(metric=pp_labels ) ) + 
+  theme_bw() + theme( legend.position="none" ) + xlab(NULL) + ylab(NULL)
+
+ggsave( filename="sandbox/fig/goals_by_season.jpg", width=7,height=6)
+```
+
+
+```{r 5on4 totals}
+corsi_events   <- c( "GOAL", "SHOT", "MISS", "BLOCK" )
+fenwick_events <- c( "GOAL", "SHOT", "MISS" )
+shot_attempts <- tbl( nhl_db, "stage_playbyplay" ) %>% 
+  filter( event_type %in% corsi_events, session_id=="2", start_cum != 65 ) %>% collect()
+
+shot_attempts <- shot_attempts %>% mutate(
+  home_en = is.na(home_goalie),
+  away_en = is.na(away_goalie),
+  home_skaters = home_skater_cnt - !home_en,
+  away_skaters = away_skater_cnt - !away_en,
+  event_team_skater_count = ifelse( event_team_ha=="H", paste0( home_skaters, "v", away_skaters ), 
+                                    paste0( away_skaters, "v", home_skaters ) ),
+  event_team_player_cnt = ifelse( event_team_ha=="H", home_skater_cnt, away_skater_cnt ),
+  opp_team_player_cnt   = ifelse( event_team_ha=="H", away_skater_cnt, home_skater_cnt ),
+  event_team_en = ifelse( event_team_ha=="H", home_en, away_en ),
+  opp_team_en   = ifelse( event_team_ha=="H", away_en, home_en ),
+  event_team_strength = ifelse( event_team_player_cnt > opp_team_player_cnt, "pp",
+    ifelse( event_team_player_cnt < opp_team_player_cnt, "sh", "ev" ) )
+)
+
+goals <- shot_attempts %>% filter( event_type=="GOAL" )
+# goals$event_team[ goals$event_team=="ATL" ] <- "WPG"
+# goals$event_team[ goals$event_team=="PHX" ] <- "ARI"
+
+goals_by_season <- goals %>% group_by( season ) %>% summarise( count=n() )
+goals_by_season$season_end <- get_season_end( goals_by_season$season )
+
+p.goals <- ggplot( goals_by_season %>% filter( season_end != 2013), aes(x=season_end, y=count))
+p.goals + geom_line(aes(group=1)) + geom_point()
+
+
+fenwick_by_team <- shot_attempts  %>% 
+  filter( event_type  %in% fenwick_events) %>%
+  group_by( season, event_team, event_team_strength, event_team_skater_count, event_team_en, opp_team_en )  %>% 
+  summarise( fenwick=n() )
+
+goals_by_team <- goals  %>% 
+  # filter( season == "20152016" ) %>% 
+  group_by( season, event_team, event_team_strength, event_team_skater_count, event_team_en, opp_team_en )  %>% 
+  summarise( goals=n() )
+
+```
+
+```{r shift interval pp}
+shiftinterval <- shiftinterval %>% left_join( stage_game %>% select( 
+                      season, session_id, game_id4, home_team_short, away_team_short ),
+                      by = c( "season", "session_id", "game_id4" ) )
+
+shiftinterval <- shiftinterval %>% mutate(
+  home_strength = ifelse( num_players_h > num_players_a, "pp", 
+                                ifelse( num_players_h < num_players_a, "sh", "ev" ) ),
+  away_strength = ifelse( num_players_a > num_players_h, "pp", 
+                                ifelse( num_players_a < num_players_h, "sh", "ev" ) ),
+  home_skater_count  = paste0( num_skaters_h, "v", num_skaters_a ),
+  away_skater_count  = paste0( num_skaters_a, "v", num_skaters_h )
+) %>% arrange( game_date, start_cum )
+```
+
+```{r}
+foo <- shiftinterval %>% filter( season=="20152016", game_id4 %in% our_game_id4s )
+
+
+foo %>% filter( our_strength=="pp", our_skater_count %in% c( "5v4", "6v4") ) %>% 
+  summarise( toi=sum(duration) )
+
+foo %>% filter( our_strength=="pp", our_skater_count %in% c( "5v3", "6v3") ) %>% 
+  summarise( toi=sum(duration) )
+
+foo %>% filter( our_strength=="pp", our_skater_count %in% c( "4v3", "4v3") ) %>% 
+  summarise( toi=sum(duration) )
+
+foo %>% filter( our_strength=="pp", !our_skater_count %in% c( "4v3", "5v3", "6v3", "6v4", "5v4") ) %>% 
+  summarise( toi=sum(duration) )
+# foo <- foo %>% filter( duration > 1/60, game_id4=="0022" )
+
+foo_rle <- foo$our_skater_count %>% rle
+foo_rle_df <- data_frame( strength=foo_rle$values, length=foo_rle$lengths )
+
+foo_rle_df %>% filter( strength %in% c( "4v5", "4v6", "3v5" ) )
+
+foo_rle <- foo$our_strength %>% rle
+foo_rle_df <- data_frame( strength=foo_rle$values, length=foo_rle$lengths )
+foo_rle_df %>% filter( strength=="pp")
+
+### GAAAAAAAAA this isn't easy.
+# 0022
+# Gelinas gets a penalty.  20 seconds later, Stempniak takes a penalty.  
+# So, after 20 sec of 5on4, we have 1:40 of 5on3.  and then 20 sec of 5on4.  how many PPO is that?
+# 2.  not 3,as the above would come up with.
+```
+
+```{r}
+strength_group <- shiftinterval %>% group_by( season, game_id4, home_team_short, away_team_short,
+  home_strength, home_skater_count, away_strength, away_skater_count ) %>% 
+  summarise(
+    toi = sum(duration)
+  )
+
+pp_home <- strength_group %>% filter( home_strength=="pp" ) %>% ungroup() %>% select(
+  season, team_short=home_team_short, skater_count=home_skater_count, toi )
+
+pp_away <- strength_group %>% filter( away_strength=="pp" ) %>% ungroup() %>% select(
+  season, team_short=away_team_short, skater_count=away_skater_count, toi )
+
+pp_all <- bind_rows( pp_home, pp_away ) %>% group_by( season, team_short, skater_count ) %>% 
+  summarise( toi=sum(toi) ) %>% ungroup()
+
+pp_skater_count <- c( "5v4", "5v3", "4v3", "6v4",  "6v3" )
+pp_skater_count_no_en <- c( "5v4", "5v3", "4v3" )
+pp_groups <- pp_all %>% filter( skater_count %in% pp_skater_count )
+
+
+# njd_pp <- pp_all %>% filter( team_short=="NJD", season=="20152016" )
+pp_goals <- goals_by_team %>% ungroup() %>% filter( event_team_strength=="pp", !opp_team_en,
+                  event_team_skater_count %in% pp_skater_count )
+
+pp_fenwick <- fenwick_by_team %>% ungroup() %>% filter( event_team_strength=="pp", !opp_team_en,
+                  event_team_skater_count %in% pp_skater_count )
+
+pp_groups <- pp_groups %>% left_join( 
+  pp_goals %>% select( season, team_short=event_team, skater_count=event_team_skater_count, goals ),
+  by = c( "season", "team_short", "skater_count" )
+  ) %>% left_join( 
+  pp_fenwick %>% select( season, team_short=event_team, skater_count=event_team_skater_count, fenwick ),
+  by = c( "season", "team_short", "skater_count" )
+  )
+
+pp_groups <- pp_groups %>% replace_na(list(goals=0, fenwick=0))
+
+pp_groups <- pp_groups %>% mutate(
+  ppg_60     = round( goals   / toi * 60, 1 ),
+  fenwick_60 = round( fenwick / toi * 60, 1 )
+)
+
+pp_groups$team_short[ pp_groups$team_short=="ATL" ] <- "WPG"
+pp_groups$team_short[ pp_groups$team_short=="PHX" ] <- "ARI"
+
+```
+
+```{r}
+# focus on the groups we care about
+pp_main <- pp_groups %>% filter( skater_count %in% pp_skater_count_no_en )
+
+pp_5on4 <- pp_main %>% filter( skater_count=="5v4" ) %>% 
+              mutate(
+                season_end = get_season_end( season ),
+                team_season = paste( team_short, season_end )
+              )
+
+pp_5on4_recent <- pp_5on4 %>% filter( season_end >= 2014 ) 
+pp_5on4_last   <- pp_5on4 %>% filter( season_end == 2016 ) %>% arrange( desc(ppg_60) )
+teams_ppg_60_sorted <- pp_5on4_last$team_short
+pp_5on4_recent$team_short <- factor( pp_5on4_recent$team_short, levels=teams_ppg_60_sorted )
+pp_5on4_recent$season_end <- factor( pp_5on4_recent$season_end )
+
+p.60 <- ggplot( pp_5on4_recent, aes(x=team_short, y=ppg_60) )
+p.60 + geom_point(aes(alpha=season_end, color=season_end), size=4 ) +
+  scale_y_continuous( "PPG per 60", breaks=seq(0,10,1) ) + xlab(NULL) +
+  theme_bw() + scale_color_few() + 
+  theme( text = element_text(size=9), legend.title=element_blank(),legend.position=c(0.9,0.8))
+# ggsave( filename="sandbox/fig/pp_by_team.png", width=8,height=4)
+
+pp_5on4_last   <- pp_5on4 %>% filter( season_end == 2016 ) %>% arrange( desc(fenwick_60) )
+teams_fenwick_60_sorted <- pp_5on4_last$team_short
+pp_5on4_recent$team_short <- factor( pp_5on4_recent$team_short, levels=teams_fenwick_60_sorted )
+p.60 <- ggplot( pp_5on4_recent, aes(x=team_short, y=fenwick_60) )
+p.60 + geom_point(aes(alpha=season_end, color=season_end), size=4 ) +
+  scale_y_continuous( "Fenwick per 60", breaks=seq(0,50,1) ) + xlab(NULL) +
+  theme_bw() + scale_color_few() + 
+  theme( text = element_text(size=9), legend.title=element_blank(),legend.position=c(0.9,0.8))
+
+
+pp_5on4_yoy <- pp_5on4_recent %>% filter( season_end=="2016" ) %>% 
+                  left_join( 
+                    pp_5on4_recent %>% filter( season_end=="2015" ) %>% 
+                      select( team_short, season_end_l1=season_end,
+                      team_season_l1=team_season, 
+                        ppg_60_l1=ppg_60, toi_l1=toi, goals_l1=goals, fenwick_60_l1=fenwick_60
+                        ),
+                    by = "team_short"
+                    ) %>% 
+                  left_join( 
+                    pp_5on4_recent %>% filter( season_end=="2014" ) %>% 
+                      select( team_short, season_end_l2=season_end,
+                      team_season_l2=team_season, 
+                        ppg_60_l2=ppg_60, toi_l2=toi, goals_l2=goals, fenwick_60_l2=fenwick_60 ),
+                    by = "team_short"
+                    )
+
+
+summary( lm( data=pp_pct_yoy, ppg_pct ~ ppg_pct_l1 ) )
+summary( lm( data=pp_pct_yoy, ppg_pct_l1 ~ ppg_pct_l2 ) )
+summary( lm( data=pp_pct_yoy, ppg_pct ~ ppg_pct_l2 ) )
+
+
+summary( lm( data=pp_5on4_yoy, ppg_60 ~ ppg_60_l1 ) )
+summary( lm( data=pp_5on4_yoy, ppg_60_l1 ~ ppg_60_l2 ) )
+summary( lm( data=pp_5on4_yoy, ppg_60 ~ ppg_60_l2 ) )
+
+summary( lm( data=pp_5on4_yoy, fenwick_60 ~ fenwick_60_l1 ) )
+summary( lm( data=pp_5on4_yoy, fenwick_60_l1 ~ fenwick_60_l2 ) )
+summary( lm( data=pp_5on4_yoy, fenwick_60 ~ fenwick_60_l2 ) )
+
+```
+
+
+
+```{r arena pbp}
+pbp_2016 <- stage_playbyplay %>% filter( season=="20152016", session_id=="2" ) %>% collect()
+pbp_2016 <- pbp_2016 %>% filter( start_cum <= 60 )
+
+stage_game_2016 <- stage_game %>% filter( season=="20152016", session_id=="2" ) %>% collect()
+
+pbp_2016 <- pbp_2016 %>% left_join( stage_game_2016 %>% 
+    select( season, session_id, game_id4, home_team_short, away_team_short ), 
+  by= c( "season", "session_id", "game_id4" ) )
+
+pbp_2016_count <- pbp_2016 %>% group_by( home_team_short, game_id4 ) %>% summarise( count=n() ) 
+# league avg 
+pbp_2016_count %>% ungroup() %>% filter( home_team_short != "NJD" ) %>% select( count) %>% summary()
+league_avg <- pbp_2016_count %>% ungroup() %>% filter( ) %>% 
+  select( count) %>% unlist() %>% mean()
+league_avg_exc_NJD <- pbp_2016_count %>% ungroup() %>% filter( home_team_short != "NJD" ) %>% 
+  select( count) %>% unlist() %>% mean()
+  
+pbp_2016_summary <- pbp_2016_count %>% ungroup() %>% group_by( home_team_short ) %>% summarise(
+  min = min( count ),
+  max = max( count ),
+  mean = mean( count ),
+  sd = sd( count )
+) %>% arrange( mean) 
+
+team_sorted_pbp <- pbp_2016_summary$home_team_short
+pbp_2016_count$home_team_short <- factor( pbp_2016_count$home_team_short, levels=team_sorted_pbp )
+
+p.pbp <- ggplot( pbp_2016_count,aes(x=home_team_short, y = count) )
+p.pbp + geom_boxplot() + geom_hline( yintercept=league_avg, color="red") +
+  geom_point( pbp_2016_count %>% filter( away_team_short=="NJD"), color="red", size=2) +
+  scale_x_discrete( "Arena Home Team" ) + scale_y_continuous( "Event Count" )
+
+```
+
+
+```{r shot attempt count}
+corsi_event <- c( "GOAL", "SHOT", "MISS", "BLOCK" )
+
+shot_attempts <-  tbl( nhl_db, "stage_playbyplay" ) %>% 
+  filter( session_id=="2", event_type %in% corsi_event, start_cum <= 60 ) %>% 
+  left_join( tbl( nhl_db, "stage_game" ) %>% select( season, session_id, game_id4, home_team_short, away_team_short ), 
+  by= c( "season", "session_id", "game_id4" ) ) %>% collect()
+
+shot_attempts_by_game <- shot_attempts %>% group_by( season, game_id4, home_team_short, away_team_short) %>% 
+      summarise( 
+        sog   = sum( event_type %in% c( "GOAL", "SHOT" ) ),
+        miss  = sum( event_type == "MISS"  ), 
+        block = sum( event_type == "BLOCK" ), 
+        fenwick = sog + miss,
+        corsi   = fenwick + block
+        )
+
+njd_away <- shot_attempts_by_game %>% filter( away_team_short=="NJD" )
+njd_away$home_team_short <- "Away"
+
+league_avg <- shot_attempts_by_game %>% ungroup() %>% filter( ) %>% 
+  select( corsi ) %>% unlist() %>% mean()
+
+shot_attempts_summary <- shot_attempts_by_game %>% ungroup() %>% group_by( home_team_short ) %>% summarise(
+  min = min( corsi ),
+  max = max( corsi ),
+  mean = mean( corsi ),
+  sd = sd( corsi ),
+  median=median(corsi)
+) %>% arrange( median) 
+team_sorted_shot <- c( "Away", shot_attempts_summary$home_team_short )
+
+shot_attempts_by_game <- bind_rows( shot_attempts_by_game, njd_away )
+
+shot_attempts_by_game$home_team_short <- factor( shot_attempts_by_game$home_team_short, levels=team_sorted_shot )
+
+p.shots <- ggplot( shot_attempts_by_game,aes(x=home_team_short, y = corsi) )
+p.shots + geom_boxplot(aes(fill=home_team_short!="Away"), outlier.shape =NA) + 
+  geom_hline( yintercept=league_avg, color="red") +
+  scale_fill_manual( values=c( "red", "grey") ) +
+  geom_point( data=shot_attempts_by_game %>% filter( home_team_short !="Away", away_team_short=="NJD"), 
+    color="red", size=2, alpha=0.7) +
+  scale_x_discrete( "Arena Home Team" ) + scale_y_continuous( "Shot Attempt Count" ) + theme( legend.position="none") +
+  ggtitle( "Shot Attempts in Regulation" )
+  
+```
+```{r}
+
+shot_attempts_home <- shot_attempts_by_game %>% ungroup() %>% group_by( season, home_team_short ) %>% 
+  summarise( 
+        sog   = mean( sog ),
+        miss  = mean( miss ),
+        block = mean( block ),
+        fenwick = sog + miss,
+        corsi   = fenwick + block,
+        ha="H" 
+    ) %>% ungroup() %>% arrange( home_team_short )
+shot_attempts_away <- shot_attempts_by_game %>% ungroup() %>% group_by( season, away_team_short ) %>% 
+  summarise( 
+        sog   = mean( sog ),
+        miss  = mean( miss ),
+        block = mean( block ),
+        fenwick = sog + miss,
+        corsi   = fenwick + block,
+        ha="A" 
+    ) %>% ungroup() %>% arrange( away_team_short )
+
+shot_attempts_ha <- bind_rows(
+  shot_attempts_home  %>% rename( team_short=home_team_short ),
+  shot_attempts_away  %>% rename( team_short=away_team_short )
+) %>% arrange( team_short, season, desc(ha) )
+
+shot_attempts_ha_diff <- shot_attempts_ha %>% select(-ha) %>% ungroup() %>% group_by( season, team_short ) %>% 
+  mutate_each(
+    funs( lag(.) - . )
+  ) %>% filter( !is.na(sog)) %>% ungroup()
+
+shot_attempts_ha_diff_m <- shot_attempts_ha_diff %>% gather( metric, diff, sog:corsi ) %>% 
+              mutate(
+                        team_short = ifelse( team_short=="PHX", "ARI", team_short ),
+                        team_short = ifelse( team_short=="ATL", "WPG", team_short )
+) %>% arrange( team_short, metric, season )
+
+shot_attempts_overall <- shot_attempts_ha_diff_m %>% filter( metric=="corsi" ) %>% group_by( team_short ) %>% 
+                        summarise( diff_ha=mean(diff)
+) %>% arrange( diff_ha )
+team_sorted_shotdiff <- shot_attempts_overall$team_short
+shot_attempts_ha_diff_m$team_short <- factor( shot_attempts_ha_diff_m$team_short, 
+  levels=as.character(team_sorted_shotdiff ) )
+shot_attempts_ha_diff_m$metric <- factor( shot_attempts_ha_diff_m$metric, 
+  levels=c( "corsi", "fenwick", "block", "miss", "sog"))
+
+
+stat_sum_single <- function(fun, geom="point", ...) {
+  stat_summary(fun.y=fun, colour="red", geom=geom, size = 2.5, shape=17, ...)
+}
+few_blue  <- few_pal()(3)[3]
+
+shot_labels <- c( "corsi"="Corsi", "fenwick"="Fenwick", "block"="Block", "miss"="Miss", "sog"="SOG" )
+
+p.ha <- ggplot( shot_attempts_ha_diff_m %>% filter( metric != "fenwick"), aes(x=team_short, y=diff) )
+p.ha + 
+  geom_hline(yintercept = c(-5,0,5), color="grey", size=0.5) +
+  geom_point( data=shot_attempts_ha_diff_m %>% filter( metric != "fenwick", season!="20152016"), 
+  position=position_jitter(width=0.3),size=1.5, alpha=0.5) +
+  facet_grid( metric ~ ., scales = "free_y", labeller=labeller(metric=shot_labels ) ) +
+  geom_point( data=shot_attempts_ha_diff_m %>% filter( metric != "fenwick", season=="20152016"), color=few_blue, size=2) +
+  
+  stat_sum_single(mean) +
+  scale_x_discrete( "Team" ) + scale_y_continuous( "Home - Away Differential per Game", breaks=seq(-50,50,5) ) + 
+  # facet_grid( metric ~ ., scales = "free_y", labeller=labeller(metric=pp_labels ) ) + 
+  facet_grid( metric ~ ., scales = "free_y", labeller=labeller(metric=shot_labels ) ) +
+  theme_bw() + theme( text = element_text(size=8), legend.title=element_blank(),legend.position=c(0.9,0.8)) +
+  ggtitle( "Average Shot Count Differential per Game, Home vs. Away (last 9 seasons)" )
+
+
+ggsave( file="sandbox/fig/arena_shots_by_type.png", width=8, height=10.5)
+```
+
+
+```{r}
+# Schneider 122 goals let in on 1597 shots over 58 games
+# 0.924
+1-122/1597 
+
+# 
+1597/58
+
+# suppose 33 home and 33 away games, 30 actual shots per game, 920 Save%.
+actual_sog <- 66*30
+his_goals  <- round( (1-.92)*actual_sog )
+1-his_goals/actual_sog
+
+# now suppose 3 SOG missed at home.  but total goals is same.
+1-his_goals/(33*30 + 33*27)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
