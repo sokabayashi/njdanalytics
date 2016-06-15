@@ -37,7 +37,10 @@ knitr::opts_chunk$set(cache=FALSE, OutDec = ",")
 # player_name <- "Antoine Vermette"
 player_name <- "Nail Yakupov"
 player_name <- "Colin Wilson"
-player_name <- "Lee Stempniak"
+player_name <- "Jaromir Jagr"
+player_name <- "Mikkel Boedker"
+player_name <- "Frans Nielsen"
+player_name <- "Andy Greene"
 ```
 
 # `r player_name`
@@ -157,8 +160,10 @@ seasons_all <- player_gp %>% filter( filter_strength=="all", filter_period=="all
                     toi_gm = toi/gm %>% round(1),
                     season_start = substr( season, 1, 4 ) %>% as.numeric(),
                     season_end   = substr( season, 5, 8 ) %>% as.numeric(),
-                    date_season_start = ymd( paste0( season_start, "0915" ) ),
-                    age_season_start  =  ( ( date_season_start - ymd( player_bio$birth_date ) ) /365 ) %>% as.numeric() %>% round(),
+                    date_season_start      = ymd( paste0( season_start, "0915" ) ),
+                    date_next_season_start = ymd( paste0( season_end,   "0915" ) ),
+                    age_season_start       =  ( ( date_season_start      - ymd( player_bio$birth_date ) ) /365 ) %>% as.numeric() %>% round(),
+                    age_next_season_start  =  ( ( date_next_season_start - ymd( player_bio$birth_date ) ) /365 ) %>% as.numeric() %>% round(),
                     season_age        = paste0( season_end, "\n", age_season_start )
                   ) %>% arrange( season )
 
@@ -205,7 +210,7 @@ if( draft_year=="Undrafted" ) draft_info <- "Undrafted"
 ## SCOUT RATING?
 ```
 
-**Age** (on 9/15/15): `r player_bio$age_season_start`
+**Age** (on 9/15/16): `r player_bio$age_season_start+1`
 **Position:** `r player_bio$position`
 **Shoots:**   `r player_bio$shoots`
 **Team:**     `r player_bio$team_short`
@@ -308,7 +313,7 @@ if( num_team_seasons > 1 ) {
 season_text <- ifelse( num_seasons > 1, paste( num_seasons, "Seasons" ), "Season" )
 ```
 
-### Last `r season_text` (Regular) - All Strength
+### Last `r season_text` (Regular)
 
 ```{r career GP,fig.width=4, fig.height=1.3}
 team_y_min <- 0
@@ -326,7 +331,7 @@ p.gp +
   scale_y_continuous( "Games Played", breaks=seq(0,100,20), limits=c(y_gp_min, y_gp_max) ) +
   scale_x_continuous( breaks=seasons_all$season_end, labels=seasons_all$season_age) + 
   line_chart_theme + scale_color_few() +
-  ggtitle( "Games Played") 
+  ggtitle( "Games Played" ) 
 ```
 ```{r career TOI per Gm,fig.width=4, fig.height=1.3}
 # theme_set(theme_gray(base_size = 9))
@@ -346,7 +351,7 @@ p.toi +
   scale_y_continuous( "", breaks=seq(0,35,2),  limits=c(y_lim_min_toi_gm,y_lim_max_toi_gm) ) +  
   scale_x_continuous( breaks=seasons_all$season_end, labels=seasons_all$season_age) + 
   line_chart_theme + scale_color_few() +
-  ggtitle( "TOI/Game") 
+  ggtitle( "TOI/Game (All Strength)" ) 
 ```
 
 <!--
@@ -375,37 +380,26 @@ p.toi +
 
 
 ```{r setup game by game}
-player_recent_reg      <- player_gp %>% filter( season==recent_season_db, session_id=="2" ) %>% collect()
+player_recent_reg      <- player_gp %>% filter( season==recent_season_db, session_id=="2",
+                                              filter_period=="all", filter_score_diff=="all" ) %>% collect()
 
 team_game_dates <- game_dates %>% select( season, session_id, game_date, team_short )
 
 player_games_reg <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter(
-    filter_period=="all",
-  filter_strength=="all",
-  filter_score_diff=="all"
-  ) %>% select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
+  left_join( player_recent_reg %>% filter( filter_strength=="all" ) %>% 
+      select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 player_games_reg_ev <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter(
-    filter_period=="all",
-  filter_strength=="ev5on5",
-  filter_score_diff=="all"
-  ) %>% select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
+  left_join( player_recent_reg %>% filter( filter_strength=="ev5on5" ) %>% 
+      select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 player_games_reg_pp <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter(
-    filter_period=="all",
-  filter_strength=="pp",
-  filter_score_diff=="all"
-  ) %>% select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
+  left_join( player_recent_reg %>% filter( filter_strength=="pp" ) %>% 
+      select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 player_games_reg_sh <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter(
-    filter_period=="all",
-  filter_strength=="sh",
-  filter_score_diff=="all"
-  ) %>% select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
+  left_join( player_recent_reg %>% filter( filter_strength=="sh") %>% 
+      select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 # pg_zoo <- zoo( player_games_reg %>% select( toi), player_games_reg$game_date )
 # pg_zoo <- zoo( player_games_reg %>% select( game_date, toi) %>% filter( !is.na(toi) ) )
@@ -528,13 +522,13 @@ if( nrow(team_changes) > 1 ) {
 load( file=paste0( nhl_dir$db, "/player_season_2016.RData") )
 comparison_vars <- read_csv( file=paste0(nhl_dir$db, "/player_comparison_cols.csv"), na="" )
 comparison_vars$format_pct[is.na(comparison_vars$format_pct) ] <-""
-# gm_requirement <- 30
-gm_requirement <- 10
+gm_requirement <- 30
+# gm_requirement <- 10
 player_seasons <-  player_season_all %>% filter( position_fd == player_bio$position_fd,
                                                  session_id == "2",
                                                 (nhl_id==player_bio$nhl_id | gm >= gm_requirement), toi_gm > 5 )
-# fo_cutoff <- 150
-fo_cutoff <- 50
+fo_cutoff <- 150
+# fo_cutoff <- 50
 player_seasons <- player_seasons %>% mutate(
   fo_cnt_ev5on5 = fo_w_ev5on5 + fo_l_ev5on5,
   fo_cnt_ev5on5 = ifelse( is.na(fo_cnt_ev5on5) | fo_cnt_ev5on5 < fo_cutoff, NA, fo_cnt_ev5on5 ),
@@ -781,8 +775,9 @@ p.stats <- p.stats +
   scale_x_discrete( "", breaks=comparison_vars$comp_col,
                         labels=comparison_vars$short_desc, expand=c(x_expand,0)
                     ) + coord_flip() + 
-  # scale_fill_pander() + 
-  scale_fill_wsj() + 
+  # scale_fill_pander() +
+  # scale_fill_wsj() + 
+  scale_fill_few(palette = "dark") +
   theme_bw(base_size = 10) +
   # scale_fill_few(palette = "dark") + 
   theme( axis.title.y=element_text(hjust=-2), 
@@ -812,9 +807,10 @@ p.stats
 
 ```{r  main bar recent, fig.width=8, fig.height=2.2}
 this_season <- "20152016"
+this_season_gm_min <- 20
 toi_comparison_vars <- comparison_vars %>% filter( category=="toi" )
 
-p.stats <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, this_season = this_season, player_seasons, player_tbl, toi_comparison_vars, recent=TRUE, gm_requirement=10 )
+p.stats <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, this_season = this_season, player_seasons, player_tbl, toi_comparison_vars, recent=TRUE, gm_requirement=this_season_gm_min )
 
 p.stats
 ```
