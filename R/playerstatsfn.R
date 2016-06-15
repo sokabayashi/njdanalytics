@@ -43,16 +43,35 @@ spread_team_comp_results <- function( player_team_comp, prefix_base="toi", fd_fl
 #'
 calc_shot_stats_basic <- function( game_player ) {
   game_player %>% mutate(
+    # INDIVIDUAL calc
     a             = a1 + a2,
     p             = g + a,
+    p1            = p + a1,
     sf_i          = sh_saved_i + g,
     ff_i          = sf_i + miss_i,
     cf_i          = ff_i + ab_i,
 
     sh_pct_i      = round( g / sf_i * 100, 3),
     f_sh_pct_i    = round( g / ff_i * 100, 3),
-    fo_pct        = round( fo_w / (fo_w + fo_l) * 100, 3),
+    fo_count      = fo_w + fo_l,
+    fo_pct        = round( fo_w / fo_count * 100, 3),
     zs_o_pct      = round( zs_o / (zs_o + zs_d) * 100, 3),
+    pen_diff_i    = pen_draw_i - pen_i,
+
+    toi_pct = round( toi / (toi + toi_off) * 100, 3 ),
+
+    # per game
+    toi_gm  = round( toi      / gm, 3 ),
+    p_gm    = round( p        / gm, 3 ),
+    p1_gm   = round( p1       / gm, 3 ),
+    sf_i_gm = round( sf_i     / gm, 3 ),
+    fo_gm   = round( fo_count / gm, 3 ), # useful for identifying centers
+
+    # per 60
+    p_60          = round( p  / toi * 60, 3 ),
+    p1_60         = round( p1 / toi * 60, 3 ),
+
+
     #######
     # TEAM
     g_net         = gf - ga,
@@ -461,9 +480,11 @@ aggregate_player_stats <- function(
   ret_df <- calc_shot_stats_basic( ret_df )
   ret_df <- calc_shot_stats_rel(   ret_df, corsi_adj_factor = corsi_adj_factor )
   ret_df <- ret_df %>% mutate(
-                                toi_pct = round( toi /(toi + toi_off) * 100, 3),
-                                toi_gm  = round( toi /gm, 3),
-                                p_gm    = round( p /gm, 3)
+                                # toi_pct = round( toi /(toi + toi_off) * 100, 3),
+                                # toi_gm  = round( toi / gm, 3),
+                                # p_gm    = round( p  / gm, 3),
+                                # p1_gm   = round( p1 / gm, 3),
+                                # fo_gm   = round( fo_count / gm, 3 ) # useful for identifying centers
                                 )  %>% ungroup()
 
   # h2h data ----------------------------------------------------------------
@@ -582,7 +603,11 @@ if( !group_team ) ret_df <- ret_df %>% mutate( team_short = "NHL" )
     g,
     a,
     p,
+    p1,
     p_gm,
+    p1_gm,
+    p_60,
+    p1_60,
     # team shot stats
     gf,
     ga,
@@ -649,6 +674,8 @@ if( !group_team ) ret_df <- ret_df %>% mutate( team_short = "NHL" )
     fo_w,
     fo_l,
     fo_pct,
+    fo_count,
+    fo_gm,
     # team pen
     pen,
     pen_draw,
