@@ -145,10 +145,10 @@ supplement_game_info <- function( game_info, our_team="NJD" ) {
 #' @param our_team 3-letter team_short format for default perspective
 #' @return game_info data frame with additional fields of our_ha, row_ha, col_ha, our_team, their_team
 #' @export
-add_team_score_label <- function( team_score_subset, our_team="NJD" ) {
+add_team_score_label <- function( team_score_subset ) {
 
   team_score_retval <- team_score_subset %>% mutate(
-    game_num_date = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, "%m/%d") ),
+    game_num_date = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, " %m/ %d") ) %>% gsub( " 0", "/", . ),
     game_label    = ifelse( ha=="H", paste0( game_num_date, " ",  opp_team_short, "\n",
                                              ga, "-", gf ),
                                      paste0( game_num_date, " @", opp_team_short, "\n",
@@ -157,8 +157,9 @@ add_team_score_label <- function( team_score_subset, our_team="NJD" ) {
   )
 
   # Make a factor so that G10, G11 don't comre before G1, G2
-  game_label_factor_levels <- team_score_retval %>% select( game_date, game_label ) %>% arrange( game_date ) %>%
-    select( game_label ) %>% unlist(use.names = F)
+  game_label_factor_levels <- team_score_retval %>%
+                                select( game_date, game_label ) %>% arrange( game_date ) %>%
+                                select( game_label ) %>% unlist(use.names = F)
 
   team_score_retval$game_label <- factor( team_score_retval$game_label, levels=game_label_factor_levels )
 
