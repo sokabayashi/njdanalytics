@@ -36,23 +36,26 @@ knitr::opts_chunk$set(cache=FALSE, OutDec = ",")
 # Sometimes (e.g. Wierchioch) we want performance *prior* to most recent completed season
 use_2y_1y_ago <- F
 
-player_name <- "Nail Yakupov"
-player_name <- "Colin Wilson"
-player_name <- "Jaromir Jagr"
-player_name <- "Mikkel Boedker"
-player_name <- "Frans Nielsen"
-player_name <- "Darren Helm"
-player_name <- "Lee Stempniak"
-player_name <- "Patrick Wiercioch"
-player_name <- "David Schlemko"
-player_name <- "Jacob Josefson"
-player_name <- "Richard Panik"
-player_name <- "Matthew Carle"
-player_name <- "Derick Brassard"
+# player_name <- "Nail Yakupov"
+# player_name <- "Colin Wilson"
+# player_name <- "Jaromir Jagr"
+# player_name <- "Mikkel Boedker"
+# player_name <- "Frans Nielsen"
+# player_name <- "Darren Helm"
+# player_name <- "Lee Stempniak"
+# player_name <- "Jacob Josefson"
+# player_name <- "Richard Panik"
+# player_name <- "Matthew Carle"
+# player_name <- "Derick Brassard"
+# player_name <- "Patrick Wiercioch"
+# player_name <- "David Schlemko"
+player_name <- "Eric Gelinas"
 
 hr_player_name <- player_name
 # Manual overwrite hack from when hockey-reference name is different than NHL
-# hr_player_name <- "Matt Carle"
+if( player_name=="Matthew Carle" ) {
+  hr_player_name <- "Matt Carle"
+}
 ```
 
 # `r player_name`
@@ -68,46 +71,9 @@ hr_tbl      <- tbl( nhl_db, "hockey_reference_skater" ) # Need this for total nu
 ```{r}
 # Find all the teams the player was on this last season.  works on one season at a time only.  
 # assume player not traded back to same team in season.
-get_player_game_dates <- function( player_gp, recent_season_db ) {
-  recent_eason_end <- get_season_end( recent_season_db )
-  
-  teams_game_date <- player_gp %>% filter( season==recent_season_db, filter_strength=="all" ) %>% 
-                                    select( game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
-  
-  # get date of first game with every team
-  season_team_chg <- teams_game_date %>% group_by( team_short ) %>% filter( min_rank( game_date )==1 )
-  # Fix first date of first game and last game to go outsie reg season window
-  season_team_chg$game_date[1] <- as.Date( paste0( recent_season_end-1, "-", "10-01" ) ) # may not have dressed for 1st game of season
-  season_team_chg$last_date <- c( season_team_chg$game_date[-1], as.Date( paste0( recent_season_end, "-", "06-01" ) ) ) -1
-  
-  # Grab all games from parent teams, regardless of if player was on that team yet.
-  team_score_recent <- team_score %>% filter( season==recent_season_db, session_id=="2" ) %>% collect() %>% 
-                                      filter( team_short %in% season_team_chg$team_short ) 
-  
-  # player's TEAM game dates, across trades, regardless of whether player dressed for a game
-  game_dates <- data_frame()
-  for( i in 1:nrow( season_team_chg ) ) {
-    this_team <- season_team_chg[i,]
-    game_dates <- bind_rows( game_dates, 
-                             team_score_recent %>% filter( game_date >= this_team$game_date & 
-                                                           game_date <= this_team$last_date &
-                                                           team_short == this_team$team_short
-                                                          )
-                            )
-  }
-  game_dates <- game_dates %>% arrange( game_date ) %>% 
-    mutate(
-      player_game_number = row_number() # game_number is the team's game number.  traded players' game_number differs
-  )
-  
-  list(game_dates=game_dates, team_changes=season_team_chg )
-}
-
-# can't believe I need to write this function...
-calc_age <- function( current_date, birth_date, digits=0 ) {
-  age <- ( ( ymd(current_date)  - ymd(birth_date) ) /365.25 ) %>% as.numeric() %>% round(digits)
-  age
-}
+# returns list 
+# all game dates for player's PARENT TEAM(S) even if player did not play
+# df of teams played on, one row per team
 ```
 
 
@@ -116,16 +82,40 @@ player_bio <- player_tbl %>% filter( first_last_name == player_name ) %>% collec
 player_gp  <- gp_tbl %>% filter( nhl_id == player_bio$nhl_id, filter_period=="all", filter_score_diff=="all")
 player_hr  <- hr_tbl %>% filter( first_last_name == hr_player_name, birth_date==player_bio$birth_date ) %>% select(-id) %>% collect()
 
+# UPDATE: age at start of NEXT season.  This will need to be updated depending on report run date
+player_age_915 <- player_bio$age_season_start+1
+
+draft_year      <- player_bio$draft_year
+draft_round     <- player_bio$draft_round
+draft_overall   <- player_bio$draft_overall
+if( is.na( draft_year) ) {
+  draft_year    <- "Undrafted"
+  draft_round   <- ""
+  draft_overall <- ""
+} else {
+  draft_overall <- paste0( "(", ordinal( draft_overall ), " overall)" )
+}
+
+draft_info <- paste( draft_year, "Round ", draft_round, draft_overall ) %>% str_trim()
+
+if( draft_year=="Undrafted" ) draft_info <- "Undrafted"
+
+## CAN WE ADD SCOUT RATING?
+```
+
+```{r player season info}
 # seasons in DB only
 player_seasons_all <- player_gp %>% 
                   filter( filter_strength=="all" ) %>% 
                   group_by( season ) %>% summarize(
                     gm  = n(),
-                    toi = sum(toi)
+                    toi = sum(toi),
+                    pts = sum( p )
                   ) %>% collect() %>% 
                   mutate(
                     toi          = toi %>% round(1),
                     toi_gm       = (toi/gm) %>% round(1),
+                    pts_gm       = (pts/gm) %>% round(2),
                     season_start = substr( season, 1, 4 ) %>% as.numeric(),
                     season_end   = substr( season, 5, 8 ) %>% as.numeric(),
                     date_season_start      = ymd( paste0( season_start, "0915" ) ),
@@ -134,14 +124,12 @@ player_seasons_all <- player_gp %>%
                     age_next_season_start  =  calc_age( date_next_season_start, player_bio$birth_date ),
                     season_age_label       = paste0( season_end, "\n", age_season_start )
                   ) %>% ungroup() %>% arrange( season )
-```
 
-```{r player season info}
 min_season_end    <- min( player_seasons_all$season_end, na.rm=T )
 recent_season_end <- max( player_seasons_all$season_end )
 
-# chart only last 8 seasons
-num_seasons_to_chart <- 8
+# chart only last __ seasons
+num_seasons_to_chart <- 6
 min_season_end    <- max( recent_season_end - num_seasons_to_chart+1, min_season_end )
 num_seasons       <- recent_season_end - min_season_end + 1
 
@@ -163,29 +151,12 @@ if( use_2y_1y_ago ) {
 }
 # ### END HACK
 
-game_dates_obj <- get_player_game_dates( player_gp, recent_season_db )
+game_dates_obj <- get_player_game_dates( player_gp, team_score, recent_season_db )
 game_dates     <- game_dates_obj$game_dates
 team_changes   <- game_dates_obj$team_changes
-
-draft_year      <- player_bio$draft_year
-draft_round     <- player_bio$draft_round
-draft_overall   <- player_bio$draft_overall
-if( is.na( draft_year) ) {
-  draft_year    <- "Undrafted"
-  draft_round   <- ""
-  draft_overall <- ""
-} else {
-  draft_overall <- paste0( "(", ordinal( draft_overall ), " overall)" )
-}
-
-draft_info <- paste( draft_year, "Round ", draft_round, draft_overall ) %>% str_trim()
-
-if( draft_year=="Undrafted" ) draft_info <- "Undrafted"
-
-## SCOUT RATING?
 ```
 
-**Age** (on 9/15/16): `r player_bio$age_season_start+1`
+**Age** (on 9/15/16): `r player_age_915`
 **Position:** `r player_bio$position`
 **Shoots:**   `r player_bio$shoots`
 **Team:**     `r player_bio$team_short`
@@ -198,85 +169,103 @@ if( draft_year=="Undrafted" ) draft_info <- "Undrafted"
 
 
 ```{r career data} 
-# data for top charts
-reg_season_teams <- player_gp %>% filter( session_id=="2", filter_strength=="all", filter_period=="all", filter_score_diff=="all" ) %>% 
-                                    select( season, game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
-  
+# data for top charts, across last 8 seasons
+reg_season_teams <- player_gp %>% filter( filter_strength=="all" ) %>% 
+                                  select( season, game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
+
+# replace PHX with ARI, ATL with WPG
+reg_season_teams$team_short[ reg_season_teams$team_short=="PHX" ] <- "ARI"
+reg_season_teams$team_short[ reg_season_teams$team_short=="ATL" ] <- "WPG"
+
+# grab all of player's team changes
 player_team_changes <- reg_season_teams %>% group_by( season, team_short ) %>% summarize(
     gm = n(),      
-    game_date_first = min( game_date),
-    game_date_last  = max( game_date)
+    game_date_first = min( game_date ),
+    game_date_last  = max( game_date )
   ) %>% arrange( game_date_first )
 
-multi_team_seasons  <- player_team_changes %>% ungroup() %>% select( season, team_short, gm ) %>% mutate(
-    season_end = substr( season,5, 8) %>% as.numeric(),
-    team_gm = paste( team_short, gm )
+multi_team_seasons  <- player_team_changes %>% ungroup() %>% select( season, team_short, gm ) %>% 
+  mutate(
+    season_end = get_season_end( season ),
+    team_gm    = paste( team_short, gm )
   ) %>% group_by( season, season_end ) %>% 
   summarize(
-    n_teams = n(),
-    team_gm = paste( team_gm, collapse="\n" ),
+    n_teams    = n(),
+    team_gm    = paste( team_gm, collapse="\n" ),
     team_short = ifelse( n_teams>1, team_gm, team_short )
   ) 
 
-mulit_team_rle <- rle( multi_team_seasons$team_short )
-player_teams  <- multi_team_seasons[ cumsum(mulit_team_rle$lengths), ]
-
-num_team_seasons <- nrow( player_teams )
-player_teams <- player_teams %>% mutate(
-  last_season_xintercept = season_end + 0.5,
-  last_season_xtext      = season_end + 0.5
-)
-
-current_team_x_adj <- 0.5
-if( num_team_seasons > 1 ) {
-  player_teams$last_season_xtext[-1] <- player_teams$last_season_xtext[-num_team_seasons] + 0.70 # trial and error
-  
-  player_teams <- player_teams %>% mutate(
-    last_season_xtext = ifelse( row_number(season) !=1 & str_detect( team_short, "\n"), last_season_xtext+0.5, last_season_xtext )
-  )
-}
 ```
 
 
 ```{r career chart settings}
-theme_set(theme_bw(base_size = 10))
+theme_set( theme_bw(base_size = 10) )
 x_axis_season <- scale_x_continuous( "Season", breaks=1990:2030 )
-line_colors <- tableau_color_pal()(6)
+line_colors   <- tableau_color_pal()(6)
 # show_col( line_colors )
-gp_color  <- line_colors[3]
-toi_color <- "navy" #line_colors[1]
-pts_color <- line_colors[4]
-cf_color  <- line_colors[2]
+gp_color      <- line_colors[3]
+toi_color     <- "navy" #line_colors[1]
+pts_color     <- line_colors[4]
+cf_color      <- line_colors[2]
 cf_rel_color  <- line_colors[5]
+p_60_color    <- line_colors[6]
 
-career_line_size <- 1
+career_line_size  <- 1
 career_point_size <- 1.5
 career_line  <- geom_line(  color=gp_color, size=career_line_size  )
 career_point <- geom_point( color=gp_color, size=career_point_size )
 
-line_chart_theme <- theme(axis.title.y = element_blank(), 
-                          axis.title.x = element_blank(), 
-                          axis.text.y = element_text(size=6),
-                          axis.text.x = element_text(size=6), axis.ticks.length=unit(.1, "lines"), 
-                          # axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        legend.background = element_rect(),legend.title=element_blank(),
+line_chart_theme <- theme(
+        axis.title.y = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.text.y  = element_text(size=6),
+        axis.text.x  = element_text(size=6), 
+        axis.ticks.length = unit(.15, "lines"), 
+        # axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        # legend.background = element_rect(),
+        legend.title=element_blank(),
         legend.position="none", legend.text=element_text(size=5.5), legend.margin=unit(-0.5, "lines"),
         legend.background = element_rect(fill=alpha('blue', 1)), 
-        plot.margin=unit( c(0.5, 0.2, 0, 0.5), units="lines"), # top right bottoom left
-        plot.title=element_text(size=7.5, face="bold"),
-        axis.line = element_line(colour = "black",size=0.2),
-        strip.text.x = element_text(size=10,face="bold"),
-        strip.text.y = element_text(size=10,face="bold"),
+  
+        plot.margin = unit( c(0.5, 0.2, 0, 0.5), units="lines"), # top right bottoom left
+        plot.title  = element_text(size=7.5 ), # face="bold"
+  
+        strip.text.x = element_text(size=10),
+        strip.text.y = element_text(size=10),
+  
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()
+        # panel.border     = element_blank(),
+        # panel.background = element_blank(),
+        axis.line        = element_line(colour = "black" )
     )
+  
+# collapse to just change points
+mulit_team_rle <- rle( multi_team_seasons$team_short )
+player_teams   <- multi_team_seasons[ cumsum(mulit_team_rle$lengths), ]
+
+num_team_seasons <- nrow( player_teams )
+
+player_teams <- player_teams %>% mutate(
+  last_season_xintercept = season_end + 0.5,
+  last_season_xtext      = season_end + 0.4
+)
+
+current_team_x_adj <- 0.5
+if( num_team_seasons > 1 ) {
+  player_teams$last_season_xtext[-1] <- player_teams$last_season_xtext[-num_team_seasons] + 0.90 # trial and error
+  
+  player_teams <- player_teams %>% mutate(
+    last_season_xtext = ifelse( row_number(season) !=1 & str_detect( team_short, "\n"), 
+                                last_season_xtext+current_team_x_adj, last_season_xtext )
+  )
+}
 
 if( num_team_seasons > 1 ) {
   team_lines <- geom_vline( data=player_teams[-num_team_seasons,],
                             aes(xintercept=last_season_xintercept),color="darkorange",alpha=0.6, size=0.5)
-  team_texts <- geom_text(  data=player_teams, aes(x=last_season_xtext, y=team_y_min, label=team_short ), hjust=1.4, vjust= 0, size=1.8 )
+  # hjust=1.
+  team_texts <- geom_text(  data=player_teams, aes(x=last_season_xtext, y=team_y_min, label=team_short ), hjust=1., vjust= 0, size=1.6 )
   
   # for three charts...
   # team_texts <- geom_text(  data=player_teams, aes(x=last_season_xtext, y=team_y_min, label=team_short ), hjust=1.2, vjust= 0, size=1.8 )
@@ -289,8 +278,8 @@ season_text <- ifelse( num_seasons > 1, paste( num_seasons, "Seasons" ), "Season
 ```
 
 ### Last `r season_text` (Regular)
-
-```{r career GP,fig.width=4, fig.height=1.3}
+<!-- fig.width=4 -->
+```{r career GP,fig.width=2.7, fig.height=1.3}
 team_y_min <- 0
 y_gp_min   <- ( min( player_seasons_all$gm )*.9 ) %>% round()
 y_gp_max   <- ( max( player_seasons_all$gm )*1.2 ) %>% round()
@@ -304,11 +293,11 @@ p.gp +
   team_texts + 
   geom_text( aes(label=gm), vjust=-1, size=2 ) +
   scale_y_continuous( "Games Played", breaks=seq(0,100,20), limits=c(y_gp_min, y_gp_max) ) +
-  scale_x_continuous( breaks=player_seasons_all$season_end, labels=player_seasons_all$season_age_label_label) + 
+  scale_x_continuous( breaks=player_seasons_all$season_end, labels=player_seasons_all$season_age_label ) + 
   line_chart_theme + scale_color_few() +
   ggtitle( "Games Played" ) 
 ```
-```{r career TOI per Gm,fig.width=4, fig.height=1.3}
+```{r career TOI per Gm, fig.width=2.7, fig.height=1.3}
 # theme_set(theme_gray(base_size = 9))
 
 y_lim_min_toi_gm <- min( player_seasons_all$toi_gm )*.9
@@ -328,51 +317,44 @@ p.toi +
   line_chart_theme + scale_color_few() +
   ggtitle( "TOI/Game (All Strength)" ) 
 ```
+```{r career Pts per Game,fig.width=2.7, fig.height=1.3}
+# y_lim_min_pts_gm <- min( player_seasons_all$pts_gm ) * 0.7
+y_lim_min_pts_gm <- 0
+y_lim_max_pts_gm <- max( player_seasons_all$pts_gm ) * 1.2
+team_y_min <- y_lim_min_pts_gm
 
-<!--
-```{r career Pts per Game,fig.width=2.7, fig.height=2}
-# # theme_set(theme_gray(base_size = 9))
-# # y_lim_min <- max( player_hr_reg$p_gm ) * 0.9
-# y_lim_min <- 0
-# y_lim_max <- max( player_hr_reg$p_gm ) * 1.1
-# team_y_min <- y_lim_min
-# 
-# p.toi <- ggplot( player_hr_reg, aes(x=season_end, y=p_gm) )
-# p.toi + 
-#   team_lines + team_texts + 
-#   geom_line(  color=pts_color, size=career_line_size ) +
-#   geom_point( color=pts_color, size=career_point_size ) +
-#   geom_text( aes(label=round(p_gm,2) ), vjust=-1, size=2 ) +
-#   scale_y_continuous( "", breaks=seq(0,5,0.1), limits=c(0,y_lim_max) ) +  
-#   scale_x_continuous( breaks=player_hr_reg$season_end, labels=player_hr_reg$season_age_label) + 
-#   line_chart_theme + scale_color_few() +
-#   ggtitle( "Points/Game") # + theme( legend.position="right" )
-#  
-#   # theme(legend.postion="right")
-
+p.pts_gm <- ggplot( player_seasons_all, aes(x=season_end, y=pts_gm) )
+p.pts_gm +
+  team_lines + team_texts +
+  geom_line(  color=pts_color, size=career_line_size ) +
+  geom_point( color=pts_color, size=career_point_size ) +
+  geom_text( aes(label=round(pts_gm,2) ), vjust=-1, size=2 ) +
+  scale_y_continuous( "", breaks=seq(0,5,0.2), limits=c(y_lim_min_pts_gm,y_lim_max_pts_gm) ) +
+  scale_x_continuous( breaks=player_seasons_all$season_end, labels=player_seasons_all$season_age_label) +
+  line_chart_theme + scale_color_few() +
+  ggtitle( "Points/Game")
 ```
--->
 
 
 ```{r setup game by game}
-player_recent_reg      <- player_gp %>% filter( season==recent_season_db ) %>% collect()
+player_recent_season      <- player_gp %>% filter( season==recent_season_db ) %>% collect()
 
 team_game_dates <- game_dates %>% select( season, session_id, game_date, team_short )
 
 player_games_reg <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter( filter_strength=="all" ) %>% 
+  left_join( player_recent_season %>% filter( filter_strength=="all" ) %>% 
       select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 player_games_reg_ev <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter( filter_strength=="ev5on5" ) %>% 
+  left_join( player_recent_season %>% filter( filter_strength=="ev5on5" ) %>% 
       select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 player_games_reg_pp <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter( filter_strength=="pp" ) %>% 
+  left_join( player_recent_season %>% filter( filter_strength=="pp" ) %>% 
       select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 player_games_reg_sh <- team_game_dates %>% 
-  left_join( player_recent_reg %>% filter( filter_strength=="sh") %>% 
+  left_join( player_recent_season %>% filter( filter_strength=="sh") %>% 
       select( -game_id4, -team_short ), by = c( "season", "session_id", "game_date" ) )
 
 # pg_zoo <- zoo( player_games_reg %>% select( toi), player_games_reg$game_date )
@@ -518,11 +500,12 @@ comp_position_fd <- ifelse( player_bio$position_fd == "D", "Defensemen", "Forwar
 
 
 ```{r cf by season data}
-this_player <- player_season_all %>% filter( nhl_id == player_bio$nhl_id, season >= min_season_db, !season %in% bundled_seasons ) %>% 
+this_player <- player_season_all %>% 
+  filter( nhl_id == player_bio$nhl_id, season >= min_season_db, !season %in% bundled_seasons ) %>% 
                 select( season, cf_pct_adj_ev5on5, cf_pct_rel_adj_ev5on5, p_60_ev5on5 )
 
 this_player <- this_player %>% mutate(
-  season_end = substring( season, 5, 8 ) %>% as.numeric()
+  season_end = get_season_end( season )
 ) 
 
 this_player <- this_player %>% left_join( player_seasons_all %>% select( season_end, season_age_label ),
@@ -531,7 +514,7 @@ this_player <- this_player %>% left_join( player_seasons_all %>% select( season_
 
 
 
-```{r career cf by season,fig.width=4, fig.height=1.3}
+```{r career cf by season,fig.width=2.7, fig.height=1.3}
 # theme_set(theme_gray(base_size = 9))
 this_var <- "cf_pct_adj_ev5on5"
 
@@ -550,9 +533,9 @@ p.cf +
   scale_y_continuous( "", breaks=seq(0,100,2),  limits=c(y_lim_min_cf,y_lim_max_cf) ) +  
   scale_x_continuous( breaks=this_player$season_end, labels=this_player$season_age_label) + 
   line_chart_theme + scale_color_few() +
-  ggtitle( "Adj Corsi%") 
+  ggtitle( "Adj Corsi% (5v5)") 
 ```
-```{r career cf rel by season,fig.width=4, fig.height=1.3}
+```{r career cf rel by season,fig.width=2.7, fig.height=1.3}
 # theme_set(theme_gray(base_size = 9))
 this_var <- "cf_pct_rel_adj_ev5on5"
 
@@ -573,25 +556,30 @@ p.cf +
   line_chart_theme + scale_color_few() +
   ggtitle( "Adj Corsi% relative to Team") 
 ```
-
-```{r career Pts per Game test,fig.width=4, fig.height=2}
+```{r career p_60 by season,fig.width=2.7, fig.height=1.3}
 # theme_set(theme_gray(base_size = 9))
+this_var <- "p_60_ev5on5"
 
-# y_lim_min_pts <- max(0, min( player_hr_reg$p_gm ) - 0.2 )
-# y_lim_max_pts <- max( player_hr_reg$p_gm ) * 1.1
-# team_y_min <- y_lim_min_pts
-# 
-# p.pts <- ggplot( player_hr_reg, aes(x=season_end, y=p_gm) )
-# p.pts + 
-#   team_lines + team_texts + 
-#   geom_line(  color=pts_color, size=career_line_size ) +
-#   geom_point( color=pts_color, size=career_point_size ) +
-#   geom_text( aes(label=round(p_gm,2) ), vjust=-1, size=2 ) +
-#   scale_y_continuous( "", breaks=seq(0,5,0.1), limits=c(y_lim_min_pts,y_lim_max_pts) ) +  
-#   scale_x_continuous( breaks=player_hr_reg$season_end, labels=player_hr_reg$season_age_label) + 
-#   line_chart_theme + scale_color_few() +
-#   ggtitle( "Points/Game")
+# y_lim_min_p_60 <- min( this_player[ ,this_var] ) *.7
+y_lim_min_p_60 <- 0
+
+y_lim_max_p_60 <- max( this_player[ ,this_var]) *1.2
+team_y_min <- y_lim_min_p_60
+
+p.p60 <- ggplot( this_player, aes(x=season_end, y=p_60_ev5on5, label=round(p_60_ev5on5,2) ) )
+p.p60 + 
+  team_lines + 
+  geom_line(  color=p_60_color, size=career_line_size ) +
+  geom_point( color=p_60_color, size=career_point_size ) +
+  geom_hline( yintercept=c(0), size=0.5, color="lightblue", alpha=0.9 ) + 
+  team_texts + 
+  geom_text( vjust=-1, size=2 ) +
+  scale_y_continuous( "", breaks=seq(0,10,0.2),  limits=c(y_lim_min_p_60,y_lim_max_p_60) ) +  
+  scale_x_continuous( breaks=this_player$season_end, labels=this_player$season_age_label) + 
+  line_chart_theme + scale_color_few() +
+  ggtitle( "Points/60 (5v5)") 
 ```
+
 
 ```{r comparsion bullet chart fn}
 

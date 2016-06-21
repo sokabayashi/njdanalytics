@@ -1,0 +1,441 @@
+---
+title: "Heatmap by Game"
+geometry: margin=1cm
+output: html_document
+fontsize: 10pt
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, tidy=TRUE, cache=FALSE, OutDec = ",")
+```
+
+```{r more_setup, include=F}
+library( njdanalytics )
+# source( paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/charts.R" ) )
+
+# source( file="../sandbox/plots_multiple_left_align.R" )
+
+nhl_db <- setup_nhl_db()
+player_tbl           <- tbl( nhl_db, "player"               ) %>% collect()
+# stage_game           <- tbl( nhl_db, "stage_game"           )
+# stage_roster         <- tbl( nhl_db, "stage_roster"         )
+# stage_playbyplay     <- tbl( nhl_db, "stage_playbyplay"     )
+# stage_shift_interval <- tbl( nhl_db, "stage_shift_interval" )
+team_score           <- tbl( nhl_db, "team_score"           )
+game_player          <- tbl( nhl_db, "game_player"          ) %>% filter( filter_score_diff=="all", filter_period=="all" )
+game_h2h             <- tbl( nhl_db, "game_h2h"             )
+
+# fig directory
+fig_dir <- paste0( nhl_dir$base, "/packages/njdanalytics/sandbox/fig/" )
+# fig_dir <- paste0( fig_dir, "d_men" )
+# fig_dir <- paste0( fig_dir, "f_lines" )
+
+```
+
+```{r}
+this_season     <- "20152016"
+this_session_id <- "2"
+
+this_game_player      <- game_player %>% filter( season==this_season, session_id==this_session_id )
+team_games            <- team_score %>% filter( season==this_season, session_id==this_session_id ) %>%
+                          collect() %>% arrange( game_date )
+
+team_games           <- add_team_score_label( team_games ) %>%
+  select( team_short, game_number, season, session_id, game_date, game_id4, ha, opp_team_short, win_loss, overtime, gf, ga, game_label ) %>% 
+  mutate(
+    date_opponent = game_label %>% str_split( "\n" ) %>% pluck(2) %>% unlist() %>% sub("^[0]+", "", . ),
+    g_net    = gf-ga,
+    win_loss = factor( win_loss, levels=c( "W", "L", "OTL" ) ),
+    date_opponent_result = paste0( date_opponent, " ", win_loss, " ", gf, "-", ga ) %>% str_trim()
+    # date_opponent_result = paste0( date_opponent, " ", win_loss, " ", gf, "-", ga, " ", overtime ) %>% str_trim()
+  )
+
+```
+
+
+```{r chart param}
+# Max game number for charts
+# can't just get from player's h2h because he may have missed last 10 games and we want to show that
+max_games          <- 82 # njd_games$game_number %>% max()
+max_games_floor_10 <- max_games %>% round(-1) # for vertical grid lines
+
+ma_window_size <- 5
+x_grid_interval <- 10
+
+base_size <- 5
+season_str <- paste0( substr(this_season,1,4), "-", substr(this_season,5,8) )
+
+theme_chances <- theme_minimal() + theme(
+    # axis.ticks = element_blank(),
+    # line = element_line( size=2),
+    # axis.ticks.length = unit(0.1, "cm"),
+    legend.position = "none",
+    # legend.title=element_blank(),
+    # legend.justification=0, legend.position=c(0,1), legend.key.size = unit(0.5, "lines"), 
+    #     legend.background = element_rect(color="grey", fill=alpha('white', 0.8), size=0.5 ),
+    #     legend.text=element_text(size=4),
+    plot.margin = rep(unit(0,"lines"),4),
+    panel.margin = unit(0,"null"),
+    # panel.grid.minor = element_line( colour="black" ),
+    axis.title.y = element_text( size = rel(0.5)  ),
+    # axis.title.x = element_text( size = rel(1.)  ),
+    axis.text.y  = element_text( size = base_size )
+    # axis.text.x  = element_text( size = base_size )
+  ) 
+
+# show_col(few_pal('dark')(3))
+# show_col(few_pal()(5))
+few_red   <- few_pal()(3)[1] # medium
+few_green <- few_pal()(3)[2]
+few_blue  <- few_pal()(3)[3]
+few_darkblue  <- few_pal("dark")(3)[3]
+```
+
+
+```{r}
+this_player_name <- "John Moore"
+this_player_name <- "David Schlemko"
+this_player_name <- "Adam Larsson"
+this_player_name <- "Andy Greene"
+this_player_name <- "Damon Severson"
+this_player_name <- "Jon Merrill"
+this_player_name <- "David Warsofsky"
+this_player_name <- "Seth Helgeson"
+# this_player_name <- "Eric Gelinas"
+# this_player_name <- "Marc-Andre Gragnani"
+
+this_player_name <- "Lee Stempniak"
+# this_player_name <- "Adam Henrique"
+# this_player_name <- "Travis Zajac"
+# this_player_name <- "Jacob Josefson"
+# this_player_name <- "Stephen Gionta"
+```
+
+```{r player linemates and stats df}
+this_player <- player_tbl %>% filter( first_last_name==this_player_name )
+
+player_gp   <- this_game_player %>% filter( nhl_id==this_player$nhl_id )
+
+game_dates_obj <- get_player_game_dates( player_gp, team_games, this_season )
+game_dates     <- game_dates_obj$game_dates %>% select( everything(), team_gf=gf, team_ga=ga, team_g_net=g_net )
+team_changes   <- game_dates_obj$team_changes
+
+this_player_by_game_list <- get_linemates_by_game( 
+  this_player_name,
+  this_season,
+  this_session_id,
+  player_tbl,
+  game_h2h,
+  game_dates )
+
+# Individual stats by game.  Multiple rows per game for different strength
+this_player_stats_by_game <- get_player_stats_by_game( 
+  this_player_name,
+  this_season,
+  this_session_id,
+  player_tbl,
+  game_player,
+  game_dates,
+  overwrite_ev5on5_toi=TRUE )
+
+# this_player_toi_by_game_ev    <- this_player_by_game_list$toi_ev5on5
+this_player_linemates_by_game <- this_player_by_game_list$linemates_ev5on5
+```
+
+
+
+
+<!-- ```{r} -->
+
+<!-- p.score <- ggplot( game_dates, aes(player_game_number,y=g_net) ) -->
+<!-- p.score <- p.score +  -->
+<!--   geom_bar(stat="identity", aes(fill=win_loss) ) + -->
+<!--   scale_fill_manual( name="", -->
+<!--                      limits=c( "W", "L", "OTL" ), -->
+<!--                      labels=c( "W", "L", "OTL" ), # breaks= c( "sh", "ev5on5", "pp"), -->
+<!--      values=alpha(c( "black", few_red, "grey" ), 1) ) + -->
+<!--   geom_text( aes(label=date_opponent,y=-6), color=few_blue, angle=90, size=1.5, hjust=0 ) + -->
+<!--   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) + -->
+<!--   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) + -->
+<!--   scale_y_continuous( "Opponent", breaks=NULL ) + -->
+<!--   theme_chances -->
+
+<!-- p.score -->
+<!-- ``` -->
+
+
+```{r linemates chart}
+p.linemates <- ggplot( this_player_linemates_by_game, aes(player_game_number, num_last_name_2_label))
+p.linemates  <- p.linemates + 
+  geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
+  scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  # scale_x_continuous( limits=c(1,60), breaks=seq(0,100,10) ) + 
+  # scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.,100,10), expand = c(0, 0)) +
+  scale_y_discrete( "Linemate", expand = c(0, 0)) +
+  # labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
+  theme_minimal() + theme(
+      axis.ticks = element_blank(),
+      # line = element_line( size=2),
+      # axis.ticks.length = unit(0.1, "cm"),
+      legend.position = "none",
+      plot.margin = rep(unit(0,"lines"),4),
+      panel.margin = unit(0,"null"),
+      # panel.grid.minor = element_line( colour="black" ),
+      axis.title.y = element_text( size = rel(0.5)  ),
+      axis.title.x = element_text( size = rel(0.5)  ),
+      axis.text.y  = element_text( size = base_size ),
+      axis.text.x  = element_text( size = base_size )
+    ) 
+
+p.linemates
+
+```
+
+
+
+
+```{r own toi chart}
+toi_max <- this_player_stats_by_game$toi %>% max(na.rm=T) %>% ceiling() + 4 # cushion to allow legend in top left
+
+this_player_stats_by_game$filter_strength <- factor( this_player_stats_by_game$filter_strength, levels=c( "pp", "sh", "ev5on5", "all" ))
+this_player_stats_by_game <- this_player_stats_by_game %>% arrange( player_game_number, filter_strength )
+
+
+this_player_toi_by_game <- this_player_stats_by_game %>% 
+                            filter( filter_strength %in% c("pp", "sh", "all") | is.na(filter_strength) ) %>% 
+                            arrange( player_game_number, filter_strength )
+
+toi_all <- this_player_toi_by_game %>% filter( filter_strength=="all" ) %>% select(player_game_number, toi)
+toi_all$ma <- rollmean( toi_all$toi, ma_window_size, fill=NA )
+
+this_player_toi_by_game <- this_player_toi_by_game %>% left_join(
+                                toi_all %>% select( player_game_number, ma ), by="player_game_number"
+)
+
+p.this_player_toi <- ggplot( this_player_toi_by_game, aes(x=player_game_number,y=toi) )
+p.this_player_toi <- p.this_player_toi + 
+                    geom_bar(data = this_player_stats_by_game %>% 
+                      filter( filter_strength %in% c("pp", "ev5on5", "sh" ) | is.na(filter_strength) ),
+                      stat="identity", position="stack", aes(fill=filter_strength) ) +
+ scale_fill_manual( name=NULL,
+                     limits=c( "pp", "sh", "ev5on5" ),
+                     labels=c( "PP", "SH", "EV" ), # breaks= c( "sh", "ev5on5", "pp"),
+                      guide = guide_legend(reverse=TRUE),
+                      values=alpha(c( few_blue , few_red, "grey85") ) ) +
+  geom_hline( yintercept=seq(5,20,5), size=0.2, color="darkgreen" ) +
+  geom_line( aes(y=ma), color="navy", size=1 ) +
+  # geom_line( data= this_player_stats_by_game %>% filter( filter_strength == "all" | is.na(filter_strength) ),
+             # color="darkred",size=1) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  scale_y_continuous( "TOI",        minor_breaks=NULL,  breaks=seq(0,40,5),     limits=c(0,toi_max) ) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) +
+  theme_chances + theme(
+    legend.position = c(0.03,0.9), # top left. trial an error
+    legend.key.size = unit(0.5, "lines"),
+    legend.text     = element_text(size=4)
+  ) 
+
+p.this_player_toi
+
+```
+
+
+
+```{r}
+
+p.score <- ggplot( game_dates, aes(player_game_number,y=team_g_net) )
+p.score <- p.score + 
+  geom_bar(stat="identity", aes(fill=win_loss) ) +
+  scale_fill_manual( name="",
+                     limits=c( "W", "L", "OTL" ),
+                     labels=c( "W", "L", "OTL" ), # breaks= c( "sh", "ev5on5", "pp"),
+     values=alpha(c( "black", few_red, "pink" ), 1) ) +
+  geom_text( aes(label=date_opponent,y=-6), color=few_blue, angle=90, size=1.5, hjust=0 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) +
+  scale_y_continuous( "Opponent", breaks=NULL ) +
+  theme_chances
+
+p.score
+```
+
+```{r plus minus}
+goals_by_game <- this_player_stats_by_game %>% filter( filter_strength=="ev5on5" ) %>% select( player_game_number, gf, ga, g_net )
+# goals_by_game <- njd_scores %>% select( game_number, date_opponent_result ) %>% left_join( goals_by_game, by="player_game_number" )
+
+ma_df <- goals_by_game %>% filter( !is.na(g_net) ) %>% select( player_game_number, g_net )
+ma_df <- ma_df %>% mutate(
+  ma=rollmean( g_net, ma_window_size, fill=NA)
+)
+
+goals_by_game <- goals_by_game %>% left_join(
+  ma_df %>% select( player_game_number, ma ), by="player_game_number" 
+)
+
+goals_by_game_m <- goals_by_game %>% gather( for_against, count, gf:ga, factor_key=T )
+
+max_ga <- goals_by_game$ga %>% max(na.rm=T) + 0.5 # cushion for label
+max_gf <- goals_by_game$gf %>% max(na.rm=T) + 0.5
+
+p.goals <- ggplot( goals_by_game_m, aes(x=player_game_number,y= count) )
+p.goals <- p.goals + 
+   geom_bar( data=goals_by_game_m %>% filter( for_against=="gf"), stat="identity", position="stack" ) +
+   geom_bar( data=goals_by_game_m %>% filter( for_against=="ga"), aes(y=-count), fill=few_red, stat="identity", position="stack" ) +
+  geom_hline( yintercept=0, size=0.2, color="darkgreen" ) +
+  # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
+  geom_line( aes(y=ma),color=few_green,size=1) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  scale_y_continuous( "5v5 Goals For and Against", minor_breaks =NULL, breaks=seq(-10,10,1), limits=c(-1*max_ga, max_gf) ) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) +
+  theme_chances + theme(
+    legend.position = "none",
+    legend.key.size = unit(0.5, "lines"),
+    legend.text     = element_text(size=4)
+  ) 
+
+p.goals
+
+```
+
+
+```{r points chart}
+
+points_by_game <- this_player_stats_by_game %>% filter( filter_strength %in% c( "all" ) ) %>% 
+                      select( player_game_number, filter_strength, g, a, p )
+# points_by_game <- njd_scores %>% select( player_game_number, date_opponent_result ) %>% left_join( points_by_game, by="player_game_number")
+
+# Cushion of 1 allows for legend
+p_max <- points_by_game$p %>% max(na.rm=T) %>% ceiling() + 1
+y_opp_label <- -3
+y_opp_label <- 0
+# surprisingly complicated: get Moving Average while ignoring NA and keeping window size same.
+# so, 1 2 3 with window=3 -> NA 2 NA.  so should 1 2 NA 3.
+ma_df <- points_by_game %>% filter( !is.na(p) ) %>% select( player_game_number, p )
+ma_df <- ma_df %>% mutate(
+  ma=rollmean( p, 5, fill=NA)
+)
+points_by_game <- points_by_game %>% left_join(
+  ma_df %>% select( player_game_number, ma ), by="player_game_number" 
+)
+
+points_by_game_m <- points_by_game %>% select(-p) %>% gather( point_type, points, g:ma ) %>% 
+                      mutate(
+                        point_type = factor( str_to_upper(point_type), levels=c( "G", "A", "MA"))
+)
+
+
+p.points <- ggplot( points_by_game_m %>% filter( point_type != "MA"), aes(x=player_game_number,y=points) )
+p.points <- p.points + 
+  # geom_dotplot( method="histodot",  binwidth=1, aes(fill=point_type) ) +
+   geom_bar( stat="identity", position="stack", aes(fill=point_type) ) +
+   scale_fill_manual( name=NULL,
+                     limits=c( "G", "A" ),
+                     labels=c( "G", "A" ),
+     guide = guide_legend(reverse=TRUE),
+     values=alpha(c( "darkorange", few_blue ), 0.7) ) +
+  # geom_hline( yintercept=seq(0,3,1), size=0.2, color="darkgreen" ) +
+  # geom_line( data=points_by_game_m %>% filter(point_type=="MA"), aes(x=game_number,y=points),color="black",size=1) +
+    # geom_text( aes(label=date_opponent_result, y=y_opp_label), color="grey30", angle=90, size=1.5, hjust=0 ) +
+    geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  scale_y_continuous( "5v5 Points", breaks=seq(0,10,1), limits=c(y_opp_label,p_max) ) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) +
+  theme_chances + theme(
+    legend.position = c(0.03,0.85), 
+    legend.key.size = unit(0.5, "lines"),
+    legend.text     = element_text(size=4)
+  ) 
+
+p.points
+
+```
+
+```{r combine plots}
+# plot.margin
+# top right bottom left
+
+theme_top    <- theme( plot.margin=unit(c( 0.5,1, 0.1,1), "cm"),
+                      axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
+
+theme_middle <- theme( plot.margin=unit(c( -0.1,1, 0.1,1), "cm"),
+  axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
+
+theme_bottom <- theme( plot.margin=unit(c(-0.1,1,1,1), "cm"))
+
+p.this_player_toi_middle <- p.this_player_toi + theme_middle
+p.this_player_toi_top    <- p.this_player_toi + theme_top
+p.linemates_middle       <- p.linemates + theme_middle
+p.linemates_bottom       <- p.linemates + theme_bottom
+p.points_middle          <- p.points + theme_middle
+p.goals_middle           <- p.goals + theme_middle
+p.score_bottom           <- p.score + theme_bottom
+p.score_middle           <- p.score + theme_middle
+# p.linemates           <- p.linemates       + theme_bottom
+
+```
+
+
+<!-- ```{r chart two} -->
+<!-- foo <- rbind_plots( list(p.this_player_toi_top, p.linemates), c(3,8)) -->
+
+<!-- chart_filename <- paste0( fig_dir, "/", this_player$last_name, "-linemates.png" ) -->
+<!-- grid.newpage() -->
+<!--   png( filename = chart_filename, width=7, height=4.15, units="in", res=1200,pointsize=1 ) -->
+<!--   par( -->
+<!--     mar      = c(0, 0, 0, 0), -->
+<!--     xaxs     = "i", -->
+<!--     yaxs     = "i", -->
+<!--     cex.axis = 1, -->
+<!--     cex.lab  = 1 -->
+<!--   ) -->
+<!--   # grid.draw(g) -->
+<!--   grid.arrange(foo, main=textGrob(this_player$first_last_name, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE ) -->
+<!--   dev.off() -->
+
+
+<!-- grid.newpage() -->
+<!-- grid.draw(foo) -->
+<!-- ``` -->
+
+```{r chart four}
+# foo <- rbind_plots( list(p.greenblue_top, p.points_middle, 
+#                          p.this_player_toi_middle, p.linemates_middle, p.score_bottom), 
+#                          c(2,2,2, 4.5,2) )
+foo <- rbind_plots( list( p.goals_middle, p.points_middle, 
+                          p.this_player_toi_middle, p.linemates_bottom ), 
+                         c(2.5, 1.5, 
+                           
+                           1.7, 4.2) )
+
+chart_filename <- paste0( fig_dir, "/", this_player$last_name, "-linemates.png" )
+message( "Create chart for ", this_player$last_name )
+grid.newpage()
+  png( filename = chart_filename, width=7.5, height=9, units="in", res=1200,pointsize=1 ) # res=1200
+  par(
+    mar      = c(0, 0, 0, 0),
+    xaxs     = "i",
+    yaxs     = "i",
+    cex.axis = 1,
+    cex.lab  = 1
+  )
+  # grid.draw(g)
+grid.arrange(foo, main=textGrob(str_to_upper(this_player$first_last_name), gp=gpar(fontsize=base_size+5), vjust=1.25), clip=TRUE )
+dev.off()
+  
+  
+# grid.newpage()
+# grid.draw(foo)
+```
+
+<!-- ```{r} -->
+<!-- foo <- this_player_stats_by_game  %>% filter( filter_strength == "all") -->
+<!-- foo <- foo %>% left_join( njd_games %>% select( game_number, game_id4, gf_gm=gf, ga_gm=ga, g_net_gm=g_net) ) -->
+
+<!-- p.foo <- ggplot( foo, aes(g_net_gm, toi)) -->
+<!-- p.foo + geom_point( position=position_jitter(width=0.2,height=0.5)) + geom_smooth() + -->
+<!--     scale_x_continuous("Final Score Goal Differential", breaks=-10:10 ) + -->
+<!--     scale_y_continuous("TOI/gm", breaks=seq(0,30,2) ) +ggtitle( "TOI/gm in 2015-16") -->
+
+<!-- ``` -->
