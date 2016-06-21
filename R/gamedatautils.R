@@ -149,7 +149,7 @@ add_team_score_label <- function( team_score_subset ) {
 
   team_score_retval <- team_score_subset %>% mutate(
     team_game_number = paste0( team_short, " ", game_number ),
-    game_num_date    = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, " %m/ %d") ) %>% gsub( " 0", "/", . ),
+    game_num_date    = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, " %m/ %d") ) %>% gsub( " 0", "", . ),
     game_label       = ifelse( ha=="H", paste0( game_num_date, " ",  opp_team_short, "\n",
                                              ga, "-", gf ),
                                      paste0( game_num_date, " @", opp_team_short, "\n",
