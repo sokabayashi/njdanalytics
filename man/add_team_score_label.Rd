@@ -4,7 +4,7 @@
 \alias{add_team_score_label}
 \title{Add a game label to team_score, good for x-axis.}
 \usage{
-add_team_score_label(team_score_subset, our_team = "NJD")
+add_team_score_label(team_score_subset)
 }
 \arguments{
 \item{team_score_subset}{Excerpt of team_score, filtered already for a team}

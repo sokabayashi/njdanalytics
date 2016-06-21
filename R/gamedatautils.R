@@ -148,8 +148,9 @@ supplement_game_info <- function( game_info, our_team="NJD" ) {
 add_team_score_label <- function( team_score_subset ) {
 
   team_score_retval <- team_score_subset %>% mutate(
-    game_num_date = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, " %m/ %d") ) %>% gsub( " 0", "/", . ),
-    game_label    = ifelse( ha=="H", paste0( game_num_date, " ",  opp_team_short, "\n",
+    team_game_number = paste0( team_short, " ", game_number ),
+    game_num_date    = paste0( "G", game_number, " ", win_loss, "\n", format( game_date, " %m/ %d") ) %>% gsub( " 0", "/", . ),
+    game_label       = ifelse( ha=="H", paste0( game_num_date, " ",  opp_team_short, "\n",
                                              ga, "-", gf ),
                                      paste0( game_num_date, " @", opp_team_short, "\n",
                                              gf, "-", ga ) ),
@@ -188,6 +189,76 @@ get_pairs_of_ha_numbers <- function( ha_numbers, symmetric=TRUE ) {
   }
 }
 
+#' Get player game dates for a single season.
+#'
+#' @param player_gp game_player tbl already filtered for a specific player of interest
+#' @param team_score team_score tbl, not yet filtered for team of interest
+#' @param recent_season_db Season string of form "20152016"
+#'
+#' @return list of df of game_dates and df of when player changed teams
+#' @export
+#'
+get_player_game_dates <- function( player_gp, team_score, recent_season_db ) {
+  recent_season_end <- get_season_end( recent_season_db )
+
+  teams_game_date <- player_gp %>% filter( season==recent_season_db, session_id=="2",
+                                            filter_period=="all", filter_score_diff=="all",
+                                            filter_strength=="all" ) %>%
+    select( game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
+
+  # get date of first game with every team
+  season_team_chg <- teams_game_date %>% group_by( team_short ) %>% filter( min_rank( game_date )==1 )
+
+  # Overwrite first date of first game and last game of last team to go outside reg season window
+  season_team_chg$game_date[1] <- as.Date( paste0( recent_season_end-1, "-", "10-01" ) ) # may not have dressed for 1st game of season
+  season_team_chg$last_date <- c( season_team_chg$game_date[-1], as.Date( paste0( recent_season_end, "-", "06-01" ) ) ) -1
+
+  # Grab all games from parent teams, regardless of if player was on that team yet.
+  team_score_recent <- team_score %>% filter( season==recent_season_db, session_id=="2" ) %>% collect() %>%
+    filter( team_short %in% season_team_chg$team_short )
+
+  # player's TEAM game dates, across trades, regardless of whether player dressed for a game
+  game_dates <- data_frame()
+  for( i in 1:nrow( season_team_chg ) ) {
+    this_team <- season_team_chg[i,]
+    game_dates <- bind_rows( game_dates,
+      team_score_recent %>% filter( game_date >= this_team$game_date &
+          game_date <= this_team$last_date &
+          team_short == this_team$team_short
+      )
+    )
+  }
+  game_dates <- game_dates %>% arrange( game_date ) %>%
+    mutate(
+      player_game_number = row_number() # game_number is the team's game number.  traded players' game_number differs
+    )
+
+  # grab player_game_number associated with first game with new team
+  # this for drawing separator lines with new teams
+  # NA (for now) for first team since we don't need that separator line
+  season_team_chg <- season_team_chg %>%
+                        left_join( game_dates %>% select( game_date, team_short, player_game_number), by=c( "game_date", "team_short" ) )
+  # season_team_chg$player_game_number[1] <- 1
+
+
+  list(game_dates=game_dates, team_changes=season_team_chg )
+}
+
+
+#' Calculate age given current date and birth date.
+#' I can't believe I wrote a function for this.
+#'
+#' @param current_date Date
+#' @param birth_date Birth date
+#' @param digits Number of rounding digits.  Default is 0.
+#'
+#' @return numeric
+#' @export
+#'
+calc_age <- function( current_date, birth_date, digits=0 ) {
+  age <- ( ( ymd(current_date)  - ymd(birth_date) ) /365.25 ) %>% as.numeric() %>% round(digits)
+  age
+}
 
 
 

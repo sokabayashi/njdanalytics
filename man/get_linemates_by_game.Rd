@@ -5,7 +5,7 @@
 \title{Get linemates by game}
 \usage{
 get_linemates_by_game(this_player_name, this_season = "20152016",
-  this_session_id = "2", player_tbl, game_h2h, team_score)
+  this_session_id = "2", player_tbl, game_h2h, this_player_team_games)
 }
 \arguments{
 \item{this_player_name}{String of first_last_name (capitalize first letters only)}

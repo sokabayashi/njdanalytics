@@ -16,21 +16,22 @@ get_linemates_by_game <- function(
   this_session_id="2",
   player_tbl,
   game_h2h,
-  team_score ) {
+  this_player_team_games ) {
 
   this_player <- player_tbl %>% filter( first_last_name==this_player_name ) %>% collect()
   this_player_num_last_name <- paste( this_player$number, this_player$last_name )
   this_player_id            <- this_player$nhl_id %>% as.numeric()
   this_player_fd            <- this_player$position_fd
-  this_team_short           <- this_player$team_short
+  # this_team_short           <- this_player$team_short
 
-  ### ASSUMPTION: player is NOT traded.  using his current team_short from player_tbl and grabbing all games for that team
-  # A more advanced version of this function should provide a df with game_number, game_id4
-  this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
-                                    select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
-                                    arrange( game_date ) %>% collect()
+#  ### ASSUMPTION: player is NOT traded.  using his current team_short from player_tbl and grabbing all games for that team
+#  # A more advanced version of this function should provide a df with game_number, game_id4
+  # this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
+  #                                   select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
+  #                                   arrange( game_date ) %>% collect()
+  this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect()
 
-  linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id, game_id4 %in% this_team_games$game_id4,
+  linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id, game_id4 %in% this_player_team_games$game_id4,
                                     filter_score_diff=="all", filter_strength=="ev5on5",
                                     nhl_id_1==this_player_id, team_comp=="T" ) %>%
                             group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
@@ -66,13 +67,13 @@ get_linemates_by_game <- function(
   this_player_num_last_name_label <- linemates_season$num_last_name_2_label[1]
 
   # put it all together by game. Start with team_games so we can complete() missing games
-  this_player_games <- this_team_games %>% left_join( top_linemates, by="game_id4" ) %>%
+  this_player_games <- this_player_team_games %>% left_join( top_linemates, by="game_id4" ) %>%
                                            left_join( linemates_season %>%
                                                       select( num_last_name_2, num_last_name_2_label ), by="num_last_name_2" )
   this_player_games$num_last_name_2_label <- factor( this_player_games$num_last_name_2_label,
                                                      level=rev(linemates_season$num_last_name_2_label) )
 
-  this_player_games_fill <- this_player_games %>% complete( game_number, num_last_name_2_label, fill=list(toi_pct=0) )
+  this_player_games_fill <- this_player_games %>% complete( player_game_number, num_last_name_2_label, fill=list(toi_pct=0) )
 
   # partition: self only (EV) vs linemates
   this_player_toi_games  <- this_player_games_fill %>% filter( num_last_name_2_label == this_player_num_last_name_label )
@@ -101,25 +102,29 @@ get_player_stats_by_game <- function(
   this_session_id="2",
   player_tbl,
   game_player,
-  team_score,
+  this_player_team_games,
   overwrite_ev5on5_toi=TRUE ) {
 
   this_player <- player_tbl %>% filter( first_last_name==this_first_last_name ) %>% collect()
   this_player_num_last_name <- paste( this_player$number, this_player$last_name )
   this_player_id            <- this_player$nhl_id %>% as.numeric()
   this_player_fd            <- this_player$position_fd
-  this_team_short           <- this_player$team_short
+
+  gp <- game_player %>%
+        filter( nhl_id==this_player_id, season==this_season, session_id==this_session_id,
+                filter_period=="all", filter_score_diff=="all", filter_strength %in% c( "all", "ev5on5", "pp", "sh" )
+        ) %>% collect()
+
+
+  # this_team_short           <- this_player$team_short
 
   ### ASSUMPTION: player is NOT traded.  using his current team_short from player_tbl and grabbing all games for that team
   # A more advanced version of this function should provide a df with game_number, game_id4
-  this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
-    select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
-    arrange( game_date ) %>% collect()
+  # this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
+  #   select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
+  #   arrange( game_date ) %>% collect()
 
-  gp <- game_player %>% filter( nhl_id==this_player_id, season==this_season, session_id==this_session_id,
-          filter_period=="all", filter_score_diff=="all", filter_strength %in% c( "all", "ev5on5", "pp", "sh" )
-          ) %>%
-    collect()
+  this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect()
 
   gp_select <- gp %>% select( game_date, game_id4, filter_strength,
                         toi, toi_pct,
@@ -130,7 +135,7 @@ get_player_stats_by_game <- function(
                         toi_pct_comp, toi_pct_comp_f, toi_pct_comp_d ) %>% arrange( game_date )
 
   if( overwrite_ev5on5_toi ) {
-    toi_all   <- gp_select %>% filter( filter_strength=="all" ) %>% select( game_date, game_id4, toi )
+    toi_all   <- gp_select %>% filter( filter_strength=="all"    ) %>% select( game_date, game_id4, toi )
     toi_ev5on5<- gp_select %>% filter( filter_strength=="ev5on5" ) %>% select( game_date, game_id4, toi_ev5on5=toi )
     toi_pp_sh <- gp_select %>% filter( filter_strength %in% c( "pp", "sh" ) ) %>%
       group_by( game_date, game_id4 ) %>% summarise( toi_special=sum(toi) )
@@ -147,7 +152,7 @@ get_player_stats_by_game <- function(
 
   }
 
-  this_player_games <- this_team_games %>% left_join( gp_select, by=c( "game_id4"  ) )
+  this_player_games <- this_player_team_games %>% left_join( gp_select, by=c( "game_id4", "game_date"  ) )
 
   this_player_games
 }
