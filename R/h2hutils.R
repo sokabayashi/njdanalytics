@@ -130,7 +130,7 @@ get_player_stats_by_game <- function(
                         toi, toi_pct,
                         g, a, p, cf, ca, c_net, cf_pct, cf_pct_rel, ff, fa, f_net, ff_pct, ff_pct_rel,
                         zs_o, zs_n, zs_d, zs_o_pct, zs_o_pct_rel, gf, ga, g_net, sf, sa, s_net, sf_pct, sf_pct_rel,
-                        fo_w, fo_l, pen_i, pen_draw_i,
+                        fo_w, fo_l, pen_i, pen_draw_i, sf_i,
                         toi_pct_team, toi_pct_team_f, toi_pct_team_d,
                         toi_pct_comp, toi_pct_comp_f, toi_pct_comp_d ) %>% arrange( game_date )
 
