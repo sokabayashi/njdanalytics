@@ -5,7 +5,7 @@
 \title{Get player stats by game}
 \usage{
 get_player_stats_by_game(this_first_last_name, this_season = "20152016",
-  this_session_id = "2", player_tbl, game_player, team_score,
+  this_session_id = "2", player_tbl, game_player, this_player_team_games,
   overwrite_ev5on5_toi = TRUE)
 }
 \arguments{
@@ -19,9 +19,9 @@ get_player_stats_by_game(this_first_last_name, this_season = "20152016",
 
 \item{game_player}{game_player table, NOT collected}
 
-\item{team_score}{team_score table, NOT collected}
-
 \item{overwrite_ev5on5_toi}{Flag for whether to overwrite ev5on5 TOI with all - sh - pp TOI. Default is TRUE.}
+
+\item{team_score}{team_score table, NOT collected}
 }
 \value{
 data frame
