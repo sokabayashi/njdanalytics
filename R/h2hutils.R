@@ -29,8 +29,10 @@ get_linemates_by_game <- function(
   # this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
   #                                   select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
   #                                   arrange( game_date ) %>% collect()
+
   this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect()
 
+  # dplyr 0.5 no longer allows arrange() within group
   linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id, game_id4 %in% this_player_team_games$game_id4,
                                     filter_score_diff=="all", filter_strength=="ev5on5",
                                     nhl_id_1==this_player_id, team_comp=="T" ) %>%
@@ -47,7 +49,7 @@ get_linemates_by_game <- function(
   #   top 4 (5 including self) for F, top 3 for D
   #   > 20% of this player's TOI in a particular game
   linemate_limit <- ifelse( this_player_fd=="F", 5, 4 )
-  top_linemates  <- linemates %>% filter( row_number() <=linemate_limit ) %>%
+  top_linemates  <- linemates %>% filter( min_rank(desc(toi)) <=linemate_limit ) %>%
                                   mutate( toi_pct=round( toi/max(toi), 3) ) %>% filter( toi_pct > 0.20 ) %>%
                                   select( game_id4, num_last_name_2, toi, toi_pct )
   linemates_num_last_name <- top_linemates$num_last_name_2 %>% unique() # list of all linemates
