@@ -59,7 +59,7 @@ player_name <- "Brandon Pirri"
 player_name <- "Taylor Hall"
 player_name <- "Kyle Quincey"
 # player_name <- "Ben Lovejoy"
-player_name <- "Dustin Brown"
+player_name <- "Teddy Purcell"
 # player_name <- "Tyson Barrie"
 
 
@@ -234,6 +234,12 @@ multi_team_seasons  <- player_team_changes %>% ungroup() %>% select( season, tea
     team_short = ifelse( n_teams>1, team_gm, team_short )
   ) 
 
+# collapse to just change points
+mulit_team_rle <- rle( multi_team_seasons$team_short )
+player_teams   <- multi_team_seasons[ cumsum(mulit_team_rle$lengths), ]
+
+num_team_seasons <- nrow( player_teams )
+
 ```
 
 ```{r}
@@ -250,6 +256,7 @@ add_ma_series <- function( this_game_player, variable, filter_strength="all", ma
 ```{r career chart settings}
 theme_set( theme_bw(base_size = 10) )
 x_axis_season <- scale_x_continuous( "Season", breaks=1990:2030 )
+
 line_colors   <- tableau_color_pal()(6)
 # show_col( line_colors )
 gp_color      <- line_colors[3]
@@ -258,19 +265,23 @@ pts_color     <- line_colors[4]
 cf_color      <- line_colors[2]
 cf_rel_color  <- line_colors[5]
 p_60_color    <- line_colors[6]
+g_color       <- line_colors[2]
+a_color       <- line_colors[1]
+
 # show_col(few_pal()(7))
+# GREEN
 few_green      <- few_pal()(3)[2]
 few_lightgreen <- few_pal("light")(3)[2]
-few_darkgreen  <- few_pal("dark")(3)[2]
-
-few_blue  <- few_pal()(3)[3]
+few_darkgreen  <- few_pal("dark" )(3)[2]
+# BLUE
+few_blue       <- few_pal()(3)[3]
 few_lightblue  <- few_pal("light")(3)[3]
 few_darkblue   <- few_pal("dark")(3)[3]
-
+# RED
 few_red        <- few_pal()(3)[1] # medium
 few_lightred   <- few_pal("light")(3)[1]
 few_darkred    <- few_pal("dark")(3)[1]
-
+# ORANGE
 few_darkorange <- few_pal("dark")(7)[4]
 
 career_line_size  <- 1
@@ -302,13 +313,32 @@ line_chart_theme <- theme(
         # panel.background = element_blank(),
         axis.line        = element_line(colour = "black" )
     )
-  
-# collapse to just change points
-mulit_team_rle <- rle( multi_team_seasons$team_short )
-player_teams   <- multi_team_seasons[ cumsum(mulit_team_rle$lengths), ]
 
-num_team_seasons <- nrow( player_teams )
+ma_window_size  <- 5
+x_grid_interval <- 10
 
+base_size <- 5
+theme_chances <- theme_minimal() + theme(
+    # axis.ticks = element_blank(),
+    # line = element_line( size=2),
+    # axis.ticks.length = unit(0.1, "cm"),
+    legend.position = "none",
+    # legend.title=element_blank(),
+    # legend.justification=0, legend.position=c(0,1), legend.key.size = unit(0.5, "lines"), 
+    #     legend.background = element_rect(color="grey", fill=alpha('white', 0.8), size=0.5 ),
+    #     legend.text=element_text(size=4),
+    plot.margin = rep(unit(0,"lines"),4),
+    panel.margin = unit(0,"null"),
+    # panel.grid.minor = element_line( colour="black" ),
+    axis.title.y = element_text( size = rel(0.5)  ),
+    # axis.title.x = element_text( size = rel(1.)  ),
+    axis.text.y  = element_text( size = base_size )
+    # axis.text.x  = element_text( size = base_size )
+  ) 
+
+```
+
+```{r player team chart params}
 player_teams <- player_teams %>% mutate(
   last_season_xintercept = season_end + 0.5,
   last_season_xtext      = season_end + 0.4
@@ -341,33 +371,11 @@ season_text <- ifelse( num_seasons > 1, paste( num_seasons, "Seasons" ), "Season
 
 max_games          <- 82 # njd_games$game_number %>% max()
 max_games_floor_10 <- max_games %>% round(-1) # for vertical grid lines
-
-ma_window_size <- 5
-x_grid_interval <- 10
-
-base_size <- 5
-theme_chances <- theme_minimal() + theme(
-    # axis.ticks = element_blank(),
-    # line = element_line( size=2),
-    # axis.ticks.length = unit(0.1, "cm"),
-    legend.position = "none",
-    # legend.title=element_blank(),
-    # legend.justification=0, legend.position=c(0,1), legend.key.size = unit(0.5, "lines"), 
-    #     legend.background = element_rect(color="grey", fill=alpha('white', 0.8), size=0.5 ),
-    #     legend.text=element_text(size=4),
-    plot.margin = rep(unit(0,"lines"),4),
-    panel.margin = unit(0,"null"),
-    # panel.grid.minor = element_line( colour="black" ),
-    axis.title.y = element_text( size = rel(0.5)  ),
-    # axis.title.x = element_text( size = rel(1.)  ),
-    axis.text.y  = element_text( size = base_size )
-    # axis.text.x  = element_text( size = base_size )
-  ) 
-
 ```
 
+
 ### Last `r season_text` (Regular)
-<!-- fig.width=4 -->
+
 ```{r career GP,fig.width=2.7, fig.height=1.3}
 team_y_min <- 0
 y_gp_min   <- ( min( this_player_seasons_all$gm )*.9 ) %>% round()
@@ -420,47 +428,6 @@ p.pts_gm +
   line_chart_theme + scale_color_few() +
   ggtitle( "Points/Game")
 ```
-
-
-
-
-```{r recent season linemates}
-# list of player's TOI and linemates, by game
-this_player_by_game_list <- get_linemates_by_game( 
-  player_name,
-  recent_season_db,
-  this_session_id,
-  player_tbl,
-  game_h2h,
-  game_dates )
-
-# Individual player stats by game.  Multiple rows per game for different strength
-this_player_stats_by_game <- get_player_stats_by_game( 
-  player_name,
-  recent_season_db,
-  this_session_id,
-  player_tbl,
-  player_gp,
-  game_dates,
-  overwrite_ev5on5_toi=TRUE )
-
-n_games <- nrow( game_dates )
-
-# this_player_toi_by_game_ev    <- this_player_by_game_list$toi_ev5on5
-this_player_linemates_by_game <- this_player_by_game_list$linemates_ev5on5
-```
-
-
-```{r}
-bar_colors <- tableau_color_pal()(6)
-#  show_col( bar_colors )
-toi_color <- "navy" #line_colors[1]
-g_color <- line_colors[2]
-a_color <- line_colors[1]
-
-```
-
-
 
 
 
@@ -733,7 +700,6 @@ p.stats <- p.stats +
                         labels=comparison_vars$short_desc, expand=c(x_expand,0)
                     ) + coord_flip() + 
   # scale_fill_pander() +
-  # scale_fill_wsj() + 
   scale_fill_few(palette = "dark") +
   theme_bw(base_size = 10) +
   # scale_fill_few(palette = "dark") + 
@@ -757,7 +723,7 @@ p.stats <- p.stats +
 # comp_players %>% select( nhl_id, last_name, toi_gm ) %>% mutate( percent_rank(toi_gm))
 p.stats
 }
-### `r recent_season_str`
+
 ```
 
 ### Compared to League
@@ -784,19 +750,40 @@ p.stats
 
 
 
-<!-- ```{r  main bar last3, fig.width=8, fig.height=3.5} -->
-<!-- this_season <- "20152016" -->
-<!-- nontoi_comparison_vars <- comparison_vars %>% filter( !category %in% c("toi", "bio") ) -->
-<!-- p.stats <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, this_season = this_season, player_seasons, player_tbl, nontoi_comparison_vars, -->
-<!--   recent=TRUE, gm_requirement=10) -->
 
-<!-- p.stats -->
-<!-- ``` -->
+
+
 
 
 
 
 ### `r recent_season_str` Game by Game
+
+```{r recent season linemates}
+# list of player's TOI and linemates, by game
+this_player_by_game_list <- get_linemates_by_game( 
+  player_name,
+  recent_season_db,
+  this_session_id,
+  player_tbl,
+  game_h2h,
+  game_dates )
+
+# Individual player stats by game.  Multiple rows per game for different strength
+this_player_stats_by_game <- get_player_stats_by_game( 
+  player_name,
+  recent_season_db,
+  this_session_id,
+  player_tbl,
+  player_gp,
+  game_dates,
+  overwrite_ev5on5_toi=TRUE )
+
+n_games <- nrow( game_dates )
+
+this_player_linemates_by_game <- this_player_by_game_list$linemates_ev5on5
+```
+
 
 ```{r linemates chart}
 p.linemates <- ggplot( this_player_linemates_by_game, aes(player_game_number, num_last_name_2_label))
@@ -823,13 +810,10 @@ p.linemates  <- p.linemates +
       axis.text.y  = element_text( size = base_size ),
       axis.text.x  = element_text( size = base_size )
     ) 
-
-# p.linemates
-
 ```
 
 
-```{r own toi chart}
+```{r this player toi chart}
 toi_max <- this_player_stats_by_game$toi %>% max(na.rm=T) %>% ceiling() + 4 # cushion to allow legend in top left
 
 this_player_stats_by_game$filter_strength <- factor( this_player_stats_by_game$filter_strength, levels=c( "pp", "ev5on5", "sh", "all" ))
@@ -871,11 +855,7 @@ p.toi <- p.toi +
     legend.key.size = unit(0.5, "lines"),
     legend.text     = element_text(size=4)
   ) 
-
-# p.toi
-
 ```
-
 
 
 ```{r team win loss}
@@ -894,11 +874,9 @@ p.score <- p.score +
   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) +
   scale_y_continuous( "Opponent", breaks=NULL ) +
   theme_chances
-
-# p.score
 ```
 
-```{r player 5v5 plus minus}
+```{r this player 5v5 plus minus}
 goals_by_game <- this_player_stats_by_game %>% filter( is.na(filter_strength)|filter_strength=="ev5on5" ) %>% select( player_game_number, gf, ga, g_net )
 # goals_by_game <- njd_scores %>% select( game_number, date_opponent_result ) %>% left_join( goals_by_game, by="player_game_number" )
 
@@ -933,12 +911,9 @@ p.goals <- p.goals +
     legend.key.size = unit(0.5, "lines"),
     legend.text     = element_text(size=4)
   ) 
-
-# p.goals
-
 ```
 
-```{r player 5v5 corsi}
+```{r this player 5v5 corsi}
 corsi_by_game <- this_player_stats_by_game %>% filter( is.na(filter_strength)|filter_strength=="ev5on5" ) %>% select( player_game_number, c_net )
 
 ma_df <- corsi_by_game %>% filter( !is.na(c_net) ) %>% select( player_game_number, c_net )
@@ -968,12 +943,9 @@ p.corsi <- p.corsi +
     legend.key.size = unit(0.5, "lines"),
     legend.text     = element_text(size=4)
   ) 
-
-# p.corsi
-
 ```
 
-```{r player sf_i}
+```{r this player sf_i}
 sf_i_by_game <- this_player_stats_by_game %>% filter( is.na(filter_strength)|filter_strength=="all" ) %>% select( player_game_number, sf_i )
 # sf_i_by_game <- this_player_stats_by_game %>% filter( filter_strength=="all" ) %>% select( player_game_number, sf_i )
 
@@ -1004,13 +976,10 @@ p.sf_i <- p.sf_i +
     legend.key.size = unit(0.5, "lines"),
     legend.text     = element_text(size=4)
   ) 
-
-# p.sf_i
-
 ```
 
 
-```{r points chart}
+```{r this player points chart}
 
 points_by_game <- this_player_stats_by_game %>% filter( is.na(filter_strength)|filter_strength %in% c( "all" ) ) %>% 
                       select( player_game_number, filter_strength, g, a, p )
@@ -1063,7 +1032,7 @@ p.points <- p.points +
 
 ```
 
-```{r combine plots}
+```{r chart margin adjustments}
 # plot.margin
 # top right bottom left
 
@@ -1091,53 +1060,8 @@ p.score_middle      <- p.score + theme_middle
 ```
 
 
-<!-- ```{r chart two} -->
-<!-- foo <- rbind_plots( list(p.this_player_toi_top, p.linemates), c(3,8)) -->
-
-<!-- chart_filename <- paste0( fig_dir, "/", this_player$last_name, "-linemates.png" ) -->
-<!-- grid.newpage() -->
-<!--   png( filename = chart_filename, width=7, height=4.15, units="in", res=1200,pointsize=1 ) -->
-<!--   par( -->
-<!--     mar      = c(0, 0, 0, 0), -->
-<!--     xaxs     = "i", -->
-<!--     yaxs     = "i", -->
-<!--     cex.axis = 1, -->
-<!--     cex.lab  = 1 -->
-<!--   ) -->
-<!--   # grid.draw(g) -->
-<!--   grid.arrange(foo, main=textGrob(this_player$first_last_name, gp=gpar(fontsize=base_size+1), vjust=2.5), clip=TRUE ) -->
-<!--   dev.off() -->
-
-
-<!-- grid.newpage() -->
-<!-- grid.draw(foo) -->
-<!-- ``` -->
-
-
-
-<!-- ```{r game by game, fig.width=8, fig.height=9 } -->
-
-<!-- my_plots <- list(p.toi, p.pts, p.shots, p.zs, p.cnet) -->
-<!-- gp <- do.call(rbind_max, my_plots ) -->
-<!-- # gp <- gtable_add_cols(gp, widths = sum(leg$widths)) -->
-<!-- panels <- gp$layout$t[grep("panel", gp$layout$name)] -->
-<!-- # set the relative panel heights  -->
-<!-- gp$heights[panels] <- lapply(c(3,2,2,2,3), unit, "null") -->
-<!-- # set the legend justification to top (it's a gtable embedded in a gtable) -->
-<!-- # leg[["grobs"]][[1]][["vp"]] <- viewport(just = c(0.5,1)) -->
-<!-- # gp <- gtable_add_grob(gp, leg, t = 1, l = ncol(gp)) -->
-
-<!-- grid.newpage() -->
-<!-- grid.draw(gp) -->
-
-<!-- ``` -->
-
-
-```{r chart four, fig.width=8, fig.height=10.5}
-# foo <- rbind_plots( list(p.greenblue_top, p.points_middle, 
-#                          p.this_player_toi_middle, p.linemates_middle, p.score_bottom), 
-#                          c(2,2,2, 4.5,2) )
-foo <- rbind_plots( list( p.corsi_top, 
+```{r combined chart output, fig.width=8, fig.height=10.5}
+combined_charts <- rbind_plots( list( p.corsi_top, 
                           p.sf_i_middle, 
                           p.points_middle, 
                           # p.score_middle,
@@ -1149,26 +1073,8 @@ foo <- rbind_plots( list( p.corsi_top,
                            1.8, 
                            4.5 ) )
 
-# chart_filename <- paste0( fig_dir, "/", this_player$last_name, "-linemates.pdf" )
-# message( "Create chart for ", this_player$last_name )
 grid.newpage()
-grid.draw(foo)
-  # png( filename = chart_filename, width=7.5, height=9, units="in", res=1200,pointsize=1 ) # res=1200
-  # par(
-  #   mar      = c(0, 0, 0, 0),
-  #   xaxs     = "i",
-  #   yaxs     = "i",
-  #   cex.axis = 1,
-  #   cex.lab  = 1
-  # )
-  
-# grid.arrange(foo, main=textGrob(str_to_upper(this_player$first_last_name), gp=gpar(fontsize=base_size+5), vjust=1.25), clip=TRUE )
-# dev.off()
-  
-  
-# grid.newpage()
-# grid.draw(foo)
-
+grid.draw(combined_charts)
 ```
 
 
