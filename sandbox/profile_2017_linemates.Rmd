@@ -45,7 +45,7 @@ use_2y_1y_ago <- F
 # player_name <- "Lee Stempniak"
 # player_name <- "Jacob Josefson"
 # player_name <- "Richard Panik"
-# player_name <- "Matthew Carle"
+player_name <- "Matthew Carle"
 # player_name <- "Derick Brassard"
 # player_name <- "Patrick Wiercioch"
 # player_name <- "David Schlemko"
@@ -55,12 +55,16 @@ use_2y_1y_ago <- F
 # player_name <- "Matt Martin"
 # player_name <- "Drew Miller"
 # player_name <- "Beau Bennett"
-player_name <- "Brandon Pirri"
-player_name <- "Taylor Hall"
-player_name <- "Kyle Quincey"
+# player_name <- "Brandon Pirri"
+# player_name <- "Taylor Hall"
+# player_name <- "Kyle Quincey"
 # player_name <- "Ben Lovejoy"
-player_name <- "Teddy Purcell"
+# player_name <- "P.K. Subban"
 # player_name <- "Tyson Barrie"
+# player_name <- "Yannick Weber"
+# player_name <- "Matt Bartkowski"
+# player_name <- "Jason Demers"
+# player_name <- "Korbinian Holzer"
 
 
 hr_player_name <- player_name
@@ -77,10 +81,9 @@ message( "Generate profile for ", player_name )
 
 ```{r table_db}
 this_session_id <- "2"
-
 team_score  <- tbl( nhl_db, "team_score"              )
 player_tbl  <- tbl( nhl_db, "player"                  ) %>% collect()
-gp_tbl      <- tbl( nhl_db, "game_player"             ) %>% filter( session_id==this_session_id )
+gp_tbl      <- tbl( nhl_db, "game_player"             ) 
 game_h2h    <- tbl( nhl_db, "game_h2h"                )
 hr_tbl      <- tbl( nhl_db, "hockey_reference_skater" ) # Need this for total number of seasons. nothing else
 ```
@@ -93,7 +96,7 @@ if( !nrow(player_bio) ) {
   stop( player_name, " is not in player table." )
 }
 
-player_gp  <- gp_tbl %>% filter( nhl_id == player_bio$nhl_id, session_id==this_session_id, filter_period=="all", filter_score_diff=="all" )
+player_gp  <- gp_tbl %>% filter( nhl_id == player_bio$nhl_id, filter_period=="all", filter_score_diff=="all" )
 player_hr  <- hr_tbl %>% filter( first_last_name == hr_player_name, birth_date==player_bio$birth_date ) %>% select(-id) %>% collect()
 
 #######
@@ -120,10 +123,10 @@ if( draft_year=="Undrafted" ) draft_info <- "Undrafted"
 ## CAN WE ADD SCOUT RATING?  maybe one day.....
 ```
 
-```{r player season info}
+```{r player all seasons info}
 # seasons in DB only
 this_player_seasons_all <- player_gp %>% 
-                  filter( filter_strength=="all" ) %>% 
+                  filter( session_id==this_session_id, filter_strength=="all" ) %>% 
                   group_by( season ) %>% 
                   summarize(
                     gm  = n(),
@@ -171,29 +174,6 @@ if( use_2y_1y_ago ) {
 # ### END HACK
 ```
 
-```{r augment team_score for this season only}
-## TO DO: PLAYOFFS?
-team_games           <- team_score %>% 
-                          filter( season==recent_season_db, 
-                            session_id==this_session_id # REMOVE THIS FILTER TO GET PLAYOFF GAMES.  OTHER CONSEQUENCES?
-                            ) %>%
-                          collect() %>% arrange( game_date )
-
-team_games           <- add_team_score_label( team_games ) %>%
-  select( team_short, game_number, season, session_id, game_date, game_id4, ha, opp_team_short, win_loss, overtime, gf, ga, game_label ) %>% 
-  mutate(
-    date_opponent = game_label %>% str_split( "\n" ) %>% pluck(2) %>% unlist() %>% sub("^[0]+", "", . ) %>% str_trim(),
-    g_net    = gf-ga,
-    win_loss = factor( win_loss, levels=c( "W", "L", "OTL" ) ),
-    date_opponent_result = paste0( date_opponent, " ", win_loss, " ", gf, "-", ga ) %>% str_trim()
-    # date_opponent_result = paste0( date_opponent, " ", win_loss, " ", gf, "-", ga, " ", overtime ) %>% str_trim()
-  )
-
-# find trade dates and teams
-game_dates_obj <- get_player_game_dates( player_gp, team_games, recent_season_db )
-game_dates     <- game_dates_obj$game_dates %>% select( everything(), team_gf=gf, team_ga=ga, team_g_net=g_net )
-team_changes   <- game_dates_obj$team_changes
-```
 
 **Age** (on 9/15/16): `r player_age_915`
 **Position:** `r player_bio$position`
@@ -531,7 +511,7 @@ p.p60 +
   team_lines + 
   geom_line(  color=p_60_color, size=career_line_size ) +
   geom_point( color=p_60_color, size=career_point_size ) +
-  geom_hline( yintercept=c(0), size=0.5, color="lightblue", alpha=0.9 ) + 
+  # geom_hline( yintercept=c(0), size=0.5, color="lightblue", alpha=0.9 ) + 
   team_texts + 
   geom_text( vjust=-1, size=2 ) +
   scale_y_continuous( "", breaks=seq(0,10,0.5),  limits=c(y_lim_min_p_60,y_lim_max_p_60) ) +  
@@ -757,14 +737,43 @@ p.stats
 
 
 
-### `r recent_season_str` Game by Game
+### `r recent_season_str` Game by Game (including Playoffs)
+```{r augment team_score for this season only}
+## TO DO: PLAYOFFS?
+team_games           <- team_score %>% 
+                          filter( season==recent_season_db
+                            # session_id==this_session_id # REMOVE THIS FILTER TO GET PLAYOFF GAMES.  OTHER CONSEQUENCES?
+                            ) %>%
+                          collect() %>% arrange( game_date )
+
+team_games           <- add_team_score_label( team_games ) %>%
+  select( team_short, game_number, season, session_id, game_date, game_id4, ha, opp_team_short, win_loss, overtime, gf, ga, game_label ) %>% 
+  mutate(
+    date_opponent = game_label %>% str_split( "\n" ) %>% pluck(2) %>% unlist() %>% sub("^[0]+", "", . ) %>% str_trim(),
+    g_net    = gf-ga,
+    win_loss = factor( win_loss, levels=c( "W", "L", "OTL" ) ),
+    date_opponent_result = paste0( date_opponent, " ", win_loss, " ", gf, "-", ga ) %>% str_trim()
+    # date_opponent_result = paste0( date_opponent, " ", win_loss, " ", gf, "-", ga, " ", overtime ) %>% str_trim()
+  )
+
+# find trade dates and teams
+game_dates_obj <- get_player_game_dates( player_gp, team_games, recent_season_db )
+game_dates     <- game_dates_obj$game_dates %>% select( everything(), team_gf=gf, team_ga=ga, team_g_net=g_net )
+team_changes   <- game_dates_obj$team_changes
+
+playoff_game_date_start <- game_dates %>% group_by( session_id ) %>% filter( session_id=="4", game_date==min(game_date) ) 
+playoff_player_game_number <- playoff_game_date_start$player_game_number
+
+length( playoff_player_game_number )
+```
+
 
 ```{r recent season linemates}
 # list of player's TOI and linemates, by game
 this_player_by_game_list <- get_linemates_by_game( 
   player_name,
   recent_season_db,
-  this_session_id,
+  "all", # session_id
   player_tbl,
   game_h2h,
   game_dates )
@@ -773,7 +782,7 @@ this_player_by_game_list <- get_linemates_by_game(
 this_player_stats_by_game <- get_player_stats_by_game( 
   player_name,
   recent_season_db,
-  this_session_id,
+  "all", # session_id
   player_tbl,
   player_gp,
   game_dates,
