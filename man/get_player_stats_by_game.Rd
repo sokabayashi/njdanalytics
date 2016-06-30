@@ -13,7 +13,7 @@ get_player_stats_by_game(this_first_last_name, this_season = "20152016",
 
 \item{this_season}{String like "20152016"}
 
-\item{this_session_id}{"2" or "3"}
+\item{this_session_id}{"2" or "3".   "all" will be both "2" and "3".}
 
 \item{player_tbl}{Table df}
 

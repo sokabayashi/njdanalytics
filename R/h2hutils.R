@@ -2,7 +2,7 @@
 #'
 #' @param this_player_name String of first_last_name (capitalize first letters only)
 #' @param this_season Season string, "20152016" by default.
-#' @param this_session_id Session ID, "2" by default.
+#' @param this_session_id Session ID, "2" by default.  "all" will be both "2" and "3".
 #' @param player_tbl tbl of "player" from db.  already collected.
 #' @param game_h2h tbl of "game_h2h".  Uncollected.
 #' @param team_score tbl of "team_score".  Uncollected.
@@ -31,9 +31,14 @@ get_linemates_by_game <- function(
   #                                   arrange( game_date ) %>% collect()
 
   this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect()
+  if( this_session_id == "all" ) {
+    these_session_ids <- c( "2", "3" )
+  } else {
+    these_session_ids <- c( this_session_id )
+  }
 
   # dplyr 0.5 no longer allows arrange() within group
-  linemates <- game_h2h %>% filter( season==this_season, session_id==this_session_id, game_id4 %in% this_player_team_games$game_id4,
+  linemates <- game_h2h %>% filter( season==this_season, session_id %in% these_session_ids, game_id4 %in% this_player_team_games$game_id4,
                                     filter_score_diff=="all", filter_strength=="ev5on5",
                                     nhl_id_1==this_player_id, team_comp=="T" ) %>%
                             group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
@@ -89,7 +94,7 @@ get_linemates_by_game <- function(
 #'
 #' @param this_first_last_name String of player first last name
 #' @param this_season String like "20152016"
-#' @param this_session_id "2" or "3"
+#' @param this_session_id "2" or "3".   "all" will be both "2" and "3".
 #' @param player_tbl Table df
 #' @param game_player game_player table, NOT collected
 #' @param team_score team_score table, NOT collected
@@ -112,8 +117,13 @@ get_player_stats_by_game <- function(
   this_player_id            <- this_player$nhl_id %>% as.numeric()
   this_player_fd            <- this_player$position_fd
 
+  if( this_session_id == "all" ) {
+    these_session_ids <- c( "2", "3" )
+  } else {
+    these_session_ids <- c( this_session_id )
+  }
   gp <- game_player %>%
-        filter( nhl_id==this_player_id, season==this_season, session_id==this_session_id,
+        filter( nhl_id==this_player_id, season==this_season, session_id %in% these_session_ids,
                 filter_period=="all", filter_score_diff=="all", filter_strength %in% c( "all", "ev5on5", "pp", "sh" )
         ) %>% collect()
 

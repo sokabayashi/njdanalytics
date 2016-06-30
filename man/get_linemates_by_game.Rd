@@ -12,7 +12,7 @@ get_linemates_by_game(this_player_name, this_season = "20152016",
 
 \item{this_season}{Season string, "20152016" by default.}
 
-\item{this_session_id}{Session ID, "2" by default.}
+\item{this_session_id}{Session ID, "2" by default.  "all" will be both "2" and "3".}
 
 \item{player_tbl}{tbl of "player" from db.  already collected.}
 
