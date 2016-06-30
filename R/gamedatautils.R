@@ -202,20 +202,21 @@ get_pairs_of_ha_numbers <- function( ha_numbers, symmetric=TRUE ) {
 get_player_game_dates <- function( player_gp, team_score, recent_season_db ) {
   recent_season_end <- get_season_end( recent_season_db )
 
-  teams_game_date <- player_gp %>% filter( season==recent_season_db, session_id=="2",
+  teams_game_date <- player_gp %>% filter( season==recent_season_db,
+                                            # session_id=="2",
                                             filter_period=="all", filter_score_diff=="all",
                                             filter_strength=="all" ) %>%
-    select( game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
+    select( session_id, game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
 
   # get date of first game with every team
   season_team_chg <- teams_game_date %>% group_by( team_short ) %>% filter( min_rank( game_date )==1 )
 
   # Overwrite first date of first game and last game of last team to go outside reg season window
   season_team_chg$game_date[1] <- as.Date( paste0( recent_season_end-1, "-", "10-01" ) ) # may not have dressed for 1st game of season
-  season_team_chg$last_date <- c( season_team_chg$game_date[-1], as.Date( paste0( recent_season_end, "-", "06-01" ) ) ) -1
+  season_team_chg$last_date <- c( season_team_chg$game_date[-1], as.Date( paste0( recent_season_end, "-", "07-01" ) ) ) -1
 
   # Grab all games from parent teams, regardless of if player was on that team yet.
-  team_score_recent <- team_score %>% filter( season==recent_season_db, session_id=="2" ) %>% collect() %>%
+  team_score_recent <- team_score %>% filter( season==recent_season_db ) %>% collect() %>%
     filter( team_short %in% season_team_chg$team_short )
 
   # player's TEAM game dates, across trades, regardless of whether player dressed for a game
