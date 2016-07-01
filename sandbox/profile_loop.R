@@ -20,46 +20,72 @@ require(rmarkdown)
 
 player_tbl  <- tbl( nhl_db, "player" ) %>% collect()
 
-# player_name <- "Damon Severson"
+# player_name <-
 player_names <- c(
-  # "Andy Greene",
-  # "David Schlemko",
-  #
+  "Andy Greene",
+  "Damon Severson",
+  "David Schlemko"
+
+  # # LD
+  # "Dan Hamhuis",
   # "Brian Campbell",
-  # "Alex Goligoski",
-  # "Keith Yandle",
-  # "Justin Schultz",
-  #
-  # "Jason Demers",
-  # "Michal Jordan",
-  # "John-Michael Liles",
   # "Kris Russell",
-  # "Matt Tennyson",
-  #
-  # "Matthew Carle",
-  # "Eric Gryba",
-  # "Ben Lovejoy",
   # "Kyle Quincey",
+  # "John-Michael Liles",
+  # "Matt Bartkowski",
+  # "Kevin Connauton",
+  # "Michal Jordan",
+  # "Matthew Carle",
+  # "Patrick Wiercioch",
+  #
+  # # RD
+  # "Ben Lovejoy",
+  # "Jason Demers",
   # "Luke Schenn",
-  # "Patrick Wiercioch"
+  # "Justin Schultz",
+  # "Korbinian Holzer",
+  # "Eric Gryba",
+  # "Yannick Weber",
+  # "Matt Tennyson",
+  # "Mark Fayne",
+  # "Roman Polak"
+
+  # # LW
+  # "Loui Eriksson",
+  # "Andrew Ladd",
+  # "Mikkel Boedker",
+  # "Darren Helm",
+  # "Viktor Stalberg",
   # "Jason Chimera",
-  # "Patrick Eaves",
-  # "Michael Grabner",
-  "Trevor Lewis",
-  "Matt Martin"
-  # "Mike Santorelli",
-  # "Chris Stewart",
-  # "Dale Weise",
-  # "Matt Cullen"
-  # "Dominic Moore",
+  # "Jamie McGinn",
+  # "Matt Martin",
+  # "Gabriel Bourque",
+  # "Brandon Pirri",
+  #
+  # ## C
+  # "David Backes",
+  # "Vernon Fiddler",
+  # "Shawn Matthias",
+  # "Colton Sceviour",
   # "Riley Nash",
-  # "Ben Smith",
-  # "Kyle Clifford",
-  # "Dwight King",
-  # "Jordan Nolan",
-  # "Ryan Reaves",
   # "Ryan White",
-  # "Vernon Fiddler"
+  # "Michael Latta",
+  #
+  # # RW
+  # "Kyle Okposo",
+  # "Troy Brouwer",
+  # "Lee Stempniak",
+  # "Teddy Purcell",
+  # "Michael Grabner",
+  # "Dale Weise",
+  # "Patrick Eaves",
+  # "Brett Connolly",
+  # "Josh Jooris",
+  # "Dustin Brown",
+  # "Landon Ferraro",
+  # "Ben Smith",
+  # "Sam Gagner",
+  # "David Perron"
 )
 
 
@@ -68,5 +94,5 @@ for( player_name in player_names ) {
 
   filename_base <- paste0( profile_dir, "/", player_info$last_name, "_", player_info$first_name ) %>% tolower()
   filename_pdf <- paste0( filename_base, ".pdf" )
-  render("profile_2017.Rmd", "pdf_document", output_file = filename_pdf)
+  render("profile_2017_linemates.Rmd", "pdf_document", output_file = filename_pdf)
 }
