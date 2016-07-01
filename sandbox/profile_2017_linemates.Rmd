@@ -21,8 +21,9 @@ knitr::opts_chunk$set(fig.width=10, fig.height=5., fig.path='fig/',
                       echo=FALSE, warning=FALSE, message=FALSE)
 
 library( njdanalytics )
-library( knitr ); library( printr ); 
-require(sparkTable) # one day
+library( knitr ); 
+#  library( printr ); 
+#  require(sparkTable) # one day
 
 # nhl_db, nhl_dir
 nhl_db <- setup_nhl_db()
@@ -45,7 +46,7 @@ use_2y_1y_ago <- F
 # player_name <- "Lee Stempniak"
 # player_name <- "Jacob Josefson"
 # player_name <- "Richard Panik"
-player_name <- "Matthew Carle"
+# player_name <- "Matthew Carle"
 # player_name <- "Derick Brassard"
 # player_name <- "Patrick Wiercioch"
 # player_name <- "David Schlemko"
@@ -58,7 +59,7 @@ player_name <- "Matthew Carle"
 # player_name <- "Brandon Pirri"
 # player_name <- "Taylor Hall"
 # player_name <- "Kyle Quincey"
-# player_name <- "Ben Lovejoy"
+player_name <- "Ben Lovejoy"
 # player_name <- "P.K. Subban"
 # player_name <- "Tyson Barrie"
 # player_name <- "Yannick Weber"
@@ -234,7 +235,7 @@ add_ma_series <- function( this_game_player, variable, filter_strength="all", ma
 ```
 
 ```{r career chart settings}
-theme_set( theme_bw(base_size = 10) )
+# theme_set( theme_bw(base_size = 10) )
 x_axis_season <- scale_x_continuous( "Season", breaks=1990:2030 )
 
 line_colors   <- tableau_color_pal()(6)
@@ -269,7 +270,7 @@ career_point_size <- 1.5
 career_line  <- geom_line(  color=gp_color, size=career_line_size  )
 career_point <- geom_point( color=gp_color, size=career_point_size )
 
-line_chart_theme <- theme(
+line_chart_theme <- theme_bw() + theme(
         axis.title.y = element_blank(), 
         axis.title.x = element_blank(), 
         axis.text.y  = element_text(size=6),
@@ -349,8 +350,6 @@ if( num_team_seasons > 1 ) {
 
 season_text <- ifelse( num_seasons > 1, paste( num_seasons, "Seasons" ), "Season" )
 
-max_games          <- 82 # njd_games$game_number %>% max()
-max_games_floor_10 <- max_games %>% round(-1) # for vertical grid lines
 ```
 
 
@@ -369,7 +368,7 @@ p.gp +
   geom_point( color=gp_color, size=career_point_size ) +
   team_texts + 
   geom_text( aes(label=gm), vjust=-1, size=2 ) +
-  scale_y_continuous( "Games Played", breaks=seq(0, 100, 20), limits=c(y_gp_min, y_gp_max) ) +
+  scale_y_continuous( "Games Played", breaks=seq(0, 120, 20), limits=c(y_gp_min, y_gp_max) ) +
   scale_x_continuous( breaks=this_player_seasons_all$season_end, labels=this_player_seasons_all$season_age_label ) + 
   line_chart_theme + scale_color_few() +
   ggtitle( "Games Played" ) 
@@ -761,12 +760,21 @@ game_dates_obj <- get_player_game_dates( player_gp, team_games, recent_season_db
 game_dates     <- game_dates_obj$game_dates %>% select( everything(), team_gf=gf, team_ga=ga, team_g_net=g_net )
 team_changes   <- game_dates_obj$team_changes
 
-playoff_game_date_start <- game_dates %>% group_by( session_id ) %>% filter( session_id=="4", game_date==min(game_date) ) 
-playoff_player_game_number <- playoff_game_date_start$player_game_number
+playoff_games  <- game_dates %>% filter( session_id=="3" )
+playoff_series <- playoff_games %>% group_by( opp_team_short ) %>% 
+                    summarise( series_start_date = min(game_date), player_game_number=min(player_game_number) ) %>% 
+                    arrange( series_start_date )
 
-length( playoff_player_game_number )
 ```
 
+```{r gbg chart parameters}
+playoff_line_color <- few_green #"green"
+
+max_games          <- 82 # max( 82, nrow(game_dates) ) # njd_games$game_number %>% max()
+max_games_floor_10 <- max_games %>% round(-1) # for vertical grid lines
+
+ten_game_separator_color = "grey60"
+```
 
 ```{r recent season linemates}
 # list of player's TOI and linemates, by game
@@ -799,20 +807,23 @@ p.linemates <- ggplot( this_player_linemates_by_game, aes(player_game_number, nu
 p.linemates  <- p.linemates + 
   geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) +
-  # scale_x_continuous( limits=c(1,60), breaks=seq(0,100,10) ) + 
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  # scale_x_continuous( limits=c(1,60), breaks=seq(0,120,10) ) + 
   # scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.,100,10), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.,120,10), expand = c(0, 0)) +
   scale_y_discrete( "Linemate", expand = c(0, 0)) +
   # labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
-  theme_minimal() + theme(
+  # theme_minimal() + 
+  theme(
       axis.ticks = element_blank(),
-      # line = element_line( size=2),
       # axis.ticks.length = unit(0.1, "cm"),
       legend.position = "none",
-      plot.margin = rep(unit(0,"lines"),4),
+      plot.margin  = rep(unit(0,"lines"),4),
       panel.margin = unit(0,"null"),
+      # panel.grid.major.y = element_blank(), #element_line( colour="white" ),
+      panel.grid.major=element_blank(),
       # panel.grid.minor = element_line( colour="black" ),
       axis.title.y = element_text( size = rel(0.5)  ),
       axis.title.x = element_text( size = rel(0.5)  ),
@@ -854,11 +865,12 @@ p.toi <- p.toi +
   geom_line( aes(y=ma), color="navy", size=1 ) +
   # geom_line( data= this_player_stats_by_game %>% filter( filter_strength == "all" | is.na(filter_strength) ),
              # color="darkred",size=1) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
   scale_y_continuous( "TOI",        minor_breaks=NULL,  breaks=seq(0,40,5),     limits=c(0,toi_max) ) +
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
     legend.position = c(0.03,0.9), # top left. trial an error
     legend.key.size = unit(0.5, "lines"),
@@ -877,10 +889,11 @@ p.score <- p.score +
                      labels=c( "W", "L", "OTL" ), # breaks= c( "sh", "ev5on5", "pp"),
      values=alpha(c( "black", few_red, "pink" ), 1) ) +
   geom_text( aes(label=date_opponent,y=-6), color=few_blue, angle=90, size=3.5, hjust=0 ) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1), expand = c(0, 0)) +
   scale_y_continuous( "Opponent", breaks=NULL ) +
   theme_chances
 ```
@@ -910,11 +923,12 @@ p.goals <- p.goals +
   geom_hline( yintercept=0, size=0.2, color="darkgreen" ) +
   # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
   geom_line( aes(y=ma),color=few_green,size=1) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "5v5 Goals For and Against", minor_breaks =NULL, breaks=seq(-10,10,1), limits=c(-1*max_ga, max_gf) ) +
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
     legend.position = "none",
     legend.key.size = unit(0.5, "lines"),
@@ -942,11 +956,12 @@ p.corsi <- p.corsi +
   geom_hline( yintercept=0, size=0.2, color="darkred" ) +
   # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
   geom_line( data=corsi_by_game_m %>% filter( metric=="ma"),color=few_red, size=1) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "5v5 Net Corsi", minor_breaks =NULL, breaks=seq(-60,60,5) ) + # , limits=c(-1*max_ga, max_gf) ) +
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
     legend.position = "none",
     legend.key.size = unit(0.5, "lines"),
@@ -975,11 +990,12 @@ p.sf_i <- p.sf_i +
   geom_hline( yintercept=0, size=0.2, color="darkred" ) +
   # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
   geom_line( data=sf_i_by_game_m %>% filter( metric=="ma"),color=few_blue, size=1) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "SOG", minor_breaks =NULL, breaks=seq(0,20,1) ) + # , limits=c(-1*max_ga, max_gf) ) +
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1), limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1), limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
     legend.position = "none",
     legend.key.size = unit(0.5, "lines"),
@@ -1026,11 +1042,12 @@ p.points <- p.points +
   # geom_line( data=points_by_game_m %>% filter(point_type=="MA"), aes(x=game_number,y=points),color="black",size=1) +
   geom_line( data=points_by_game_m %>% filter( point_type=="MA"),color=few_darkred, size=1) +
     # geom_text( aes(label=date_opponent_result, y=y_opp_label), color="grey30", angle=90, size=1.5, hjust=0 ) +
-  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color="grey20", size=0.2 ) +
+  geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "Points", breaks=seq(0,10,1), limits=c(y_opp_label,p_max) ) +
-  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,100,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
+  scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
     legend.position = c(0.03,0.85), 
     legend.key.size = unit(0.5, "lines"),
