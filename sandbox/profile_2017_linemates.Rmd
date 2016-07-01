@@ -190,7 +190,7 @@ if( use_2y_1y_ago ) {
 
 ```{r career regular season data} 
 # data for top charts, across seasons
-reg_season_teams <- player_gp %>% filter( filter_strength=="all" ) %>% 
+reg_season_teams <- player_gp %>% filter( session_id=="2", filter_strength=="all" ) %>% 
                                   select( season, game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
 
 # replace PHX with ARI, ATL with WPG
@@ -438,7 +438,7 @@ comp_position_fd <- ifelse( player_bio$position_fd == "D", "Defensemen", "Forwar
 
 
 
-```{r cf by season data}
+```{r this player stats by season}
 this_player_season <- player_season_all %>% 
   filter( nhl_id == player_bio$nhl_id, season >= min_season_db, !season %in% bundled_seasons ) %>% 
                 select( season, cf_pct_adj_ev5on5, cf_pct_rel_adj_ev5on5, p_60_ev5on5 )
@@ -640,44 +640,45 @@ if( position_fd=="D" ) {
                             num_stats = num_stats )
   comp_position_fd <- "Defensemen"
   
-  p.stats <- p.stats + 
-  geom_bar( stat="identity", aes(x=variable, y=top),     fill="grey95", width=bullet_width_outer ) +
-  geom_bar( stat="identity", aes(x=variable, y=top_4_D), fill="grey85", width=bullet_width_outer ) +
-  geom_bar( stat="identity", aes(x=variable, y=top_6_D), fill="grey70", width=bullet_width_outer ) +
-  geom_bar( stat="identity", aes(x=variable, y=remaining_D), fill="grey60", width=bullet_width_outer )
+  # p.stats <- p.stats + 
+  # geom_bar( stat="identity", aes(x=variable, y=top),     fill="grey95", width=bullet_width_outer ) +
+  # geom_bar( stat="identity", aes(x=variable, y=top_4_D), fill="grey85", width=bullet_width_outer ) +
+  # geom_bar( stat="identity", aes(x=variable, y=top_6_D), fill="grey70", width=bullet_width_outer ) +
+  # geom_bar( stat="identity", aes(x=variable, y=remaining_D), fill="grey60", width=bullet_width_outer )
 } else {
   top_labels <- data_frame( percentile= (n_comps - 30*seq(3,12,3))/n_comps, 
                             top_label = c("Top 3", "Top 6", "Top 9", "Top 12" ),
                             num_stats = num_stats )
   
   comp_position_fd <- "Forwards"
-  p.stats <- p.stats + 
-  geom_bar( stat="identity", aes(x=variable, y=top),     fill="grey97", width=bullet_width_outer ) +
-  geom_bar( stat="identity", aes(x=variable, y=top_6_F), fill="grey90", width=bullet_width_outer ) +
-  geom_bar( stat="identity", aes(x=variable, y=top_9_F), fill="grey80", width=bullet_width_outer ) +
-    geom_bar( stat="identity", aes(x=variable, y=top_12_F), fill="grey70", width=bullet_width_outer ) +
-  # geom_bar( stat="identity", aes(x=variable, y=top_12_F), fill="grey65", width=bullet_width_outer ) +
-  geom_bar( stat="identity", aes(x=variable, y=remaining_F), fill="grey60", width=bullet_width_outer )
+  # p.stats <- p.stats + 
+  # geom_bar( stat="identity", aes(x=variable, y=top),     fill="grey97", width=bullet_width_outer ) +
+  # geom_bar( stat="identity", aes(x=variable, y=top_6_F), fill="grey90", width=bullet_width_outer ) +
+  # geom_bar( stat="identity", aes(x=variable, y=top_9_F), fill="grey80", width=bullet_width_outer ) +
+  #   geom_bar( stat="identity", aes(x=variable, y=top_12_F), fill="grey70", width=bullet_width_outer ) +
+  # # geom_bar( stat="identity", aes(x=variable, y=top_12_F), fill="grey65", width=bullet_width_outer ) +
+  # geom_bar( stat="identity", aes(x=variable, y=remaining_F), fill="grey60", width=bullet_width_outer )
 }
 
 if( recent ){
 p.stats <- p.stats + 
-  geom_bar( stat="identity", fill="cornflowerblue", width=0.4 )  
+  geom_bar( stat="identity", fill="cornflowerblue", width=0.5 )  
   
 } else {
 p.stats <- p.stats + 
-  geom_bar( stat="identity", aes(fill=category), width=0.4 )  
+  geom_bar( stat="identity", aes(fill=category), width=0.5 )  
 }
 
 p.stats <- p.stats + 
   geom_errorbar( stat="identity", aes(x=variable,y=team_lead_ptile, ymin=team_lead_ptile, ymax=team_lead_ptile), 
-                 width=bullet_width_outer, color="cyan", size=0.75 ) +
-    geom_text( aes( label= bar_label ), 
-             hjust=-0.3, size=2.5, parse=F) +
+                 width=bullet_width_outer, color="darkorange", size=0.75 ) +
+    
   scale_y_continuous( "", breaks=seq(0,1,0.1), limits=c(0,1.1), expand = c(0,0), label=percent ) + 
   scale_x_discrete( "", breaks=comparison_vars$comp_col,
                         labels=comparison_vars$short_desc, expand=c(x_expand,0)
                     ) + coord_flip() + 
+  geom_hline( yintercept=top_labels$percentile, color="cyan" ) +
+  geom_text( aes( label= bar_label ), hjust=-0.3, size=2.5, parse=F) +
   # scale_fill_pander() +
   scale_fill_few(palette = "dark") +
   theme_bw(base_size = 10) +
@@ -809,7 +810,7 @@ p.linemates  <- p.linemates +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) +
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   # scale_x_continuous( limits=c(1,60), breaks=seq(0,120,10) ) + 
   # scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.,120,10), expand = c(0, 0)) +
@@ -868,7 +869,7 @@ p.toi <- p.toi +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   scale_y_continuous( "TOI",        minor_breaks=NULL,  breaks=seq(0,40,5),     limits=c(0,toi_max) ) +
   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
@@ -890,7 +891,7 @@ p.score <- p.score +
      values=alpha(c( "black", few_red, "pink" ), 1) ) +
   geom_text( aes(label=date_opponent,y=-6), color=few_blue, angle=90, size=3.5, hjust=0 ) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1), expand = c(0, 0)) +
@@ -924,7 +925,7 @@ p.goals <- p.goals +
   # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
   geom_line( aes(y=ma),color=few_green,size=1) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "5v5 Goals For and Against", minor_breaks =NULL, breaks=seq(-10,10,1), limits=c(-1*max_ga, max_gf) ) +
@@ -957,7 +958,7 @@ p.corsi <- p.corsi +
   # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
   geom_line( data=corsi_by_game_m %>% filter( metric=="ma"),color=few_red, size=1) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "5v5 Net Corsi", minor_breaks =NULL, breaks=seq(-60,60,5) ) + # , limits=c(-1*max_ga, max_gf) ) +
@@ -991,7 +992,7 @@ p.sf_i <- p.sf_i +
   # geom_text( aes(label=date_opponent_result, y=-max_ga), color="grey60", angle=90, size=1.3, hjust=0 ) +
   geom_line( data=sf_i_by_game_m %>% filter( metric=="ma"),color=few_blue, size=1) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "SOG", minor_breaks =NULL, breaks=seq(0,20,1) ) + # , limits=c(-1*max_ga, max_gf) ) +
@@ -1043,7 +1044,7 @@ p.points <- p.points +
   geom_line( data=points_by_game_m %>% filter( point_type=="MA"),color=few_darkred, size=1) +
     # geom_text( aes(label=date_opponent_result, y=y_opp_label), color="grey30", angle=90, size=1.5, hjust=0 ) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
-  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+  geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=3 ) +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   scale_y_continuous( "Points", breaks=seq(0,10,1), limits=c(y_opp_label,p_max) ) +
