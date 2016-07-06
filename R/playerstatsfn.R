@@ -109,7 +109,17 @@ calc_shot_stats_basic <- function( game_player ) {
 
 # calc_shot_stats_rel ---------------------------------------------------
 
-calc_shot_stats_rel <- function( game_player, corsi_adj_factor ) {
+#' Calculate relative shot stats
+#'
+#' @param game_player Data frame
+#' @param corsi_adj double.  Default = 0.15.
+#' @param fenwick_adj double.  Default = 0.10.
+#' @param shot_adj. double.  Default = 0.05.
+#'
+#' @return data frame
+#' @export
+#'
+calc_shot_stats_rel <- function( game_player, corsi_adj=0.15, fenwick_adj=0.10, shot_adj=0.05 ) {
   game_player %>% mutate(
     zs_o_pct_off  = round( zs_o_off / (zs_o_off + zs_d_off) * 100, 3),
     zs_o_pct_rel  = zs_o_pct - zs_o_pct_off,
@@ -126,23 +136,34 @@ calc_shot_stats_rel <- function( game_player, corsi_adj_factor ) {
     cf_pct_off    = round( cf_off / (cf_off + ca_off) * 100, 3),
     cf_pct_rel    = cf_pct - cf_pct_off,
 
-    ff_adj        = ff - corsi_adj_factor*(zs_o - zs_d ),
-    fa_adj        = fa + corsi_adj_factor*(zs_o - zs_d ),
-    ff_off_adj    = ff_off - corsi_adj_factor*(zs_o_off - zs_d_off ),
-    fa_off_adj    = fa_off + corsi_adj_factor*(zs_o_off - zs_d_off ),
+    sf_adj        = sf     - shot_adj*(zs_o     - zs_d ),
+    sa_adj        = sa     + shot_adj*(zs_o     - zs_d ),
+    sf_off_adj    = sf_off - shot_adj*(zs_o_off - zs_d_off ),
+    sa_off_adj    = sa_off + shot_adj*(zs_o_off - zs_d_off ),
 
-    cf_adj        = cf - corsi_adj_factor*(zs_o - zs_d ),
-    ca_adj        = ca + corsi_adj_factor*(zs_o - zs_d ),
-    cf_off_adj    = cf_off - corsi_adj_factor*(zs_o_off - zs_d_off ),
-    ca_off_adj    = ca_off + corsi_adj_factor*(zs_o_off - zs_d_off ),
+    ff_adj        = ff - fenwick_adj*(zs_o         - zs_d ),
+    fa_adj        = fa + fenwick_adj*(zs_o         - zs_d ),
+    ff_off_adj    = ff_off - fenwick_adj*(zs_o_off - zs_d_off ),
+    fa_off_adj    = fa_off + fenwick_adj*(zs_o_off - zs_d_off ),
+
+    cf_adj        = cf - corsi_adj*(zs_o         - zs_d ),
+    ca_adj        = ca + corsi_adj*(zs_o         - zs_d ),
+    cf_off_adj    = cf_off - corsi_adj*(zs_o_off - zs_d_off ),
+    ca_off_adj    = ca_off + corsi_adj*(zs_o_off - zs_d_off ),
+
+    # the pcts
+    sf_pct_adj      = round( sf_adj / (sf_adj + sa_adj) * 100, 3 ),
+    sf_pct_off_adj  = round( sf_off_adj / (sf_off_adj + sa_off_adj) * 100, 3 ),
+    sf_pct_rel_adj  = sf_pct_adj - sf_pct_off_adj,
+
+      ff_pct_adj      = round( ff_adj / (ff_adj + fa_adj) * 100, 3 ),
+    ff_pct_off_adj  = round( ff_off_adj / (ff_off_adj + fa_off_adj) * 100, 3 ),
+    ff_pct_rel_adj  = ff_pct_adj - ff_pct_off_adj,
 
     cf_pct_adj      = round( cf_adj / (cf_adj + ca_adj) * 100, 3 ),
     cf_pct_off_adj  = round( cf_off_adj / (cf_off_adj + ca_off_adj) * 100, 3 ),
-    cf_pct_rel_adj  = cf_pct_adj - cf_pct_off_adj,
+    cf_pct_rel_adj  = cf_pct_adj - cf_pct_off_adj
 
-    ff_pct_adj      = round( ff_adj / (ff_adj + fa_adj) * 100, 3 ),
-    ff_pct_off_adj  = round( ff_off_adj / (ff_off_adj + fa_off_adj) * 100, 3 ),
-    ff_pct_rel_adj  = ff_pct_adj - ff_pct_off_adj
   )
 }
 
@@ -185,7 +206,9 @@ aggregate_player_stats <- function(
   home_away  = "all",
   ignore_team_games = NULL, # vector of team_shorts to exclude all games from, e.g., 2015 BUF
   nhl_db = NULL,
-  corsi_adj_factor = 0.25
+  corsi_adj_factor   = 0.15,
+  fenwick_adj_factor = 0.10,
+  shot_adj_factor    = 0.05
 ) {
   # load tables from db
   if( is.null( nhl_db ) ) {
@@ -478,7 +501,7 @@ aggregate_player_stats <- function(
   ret_df[ !ret_df$position_fd %in% c("G", "T") & is.na(ret_df) ] <- 0
 
   ret_df <- calc_shot_stats_basic( ret_df )
-  ret_df <- calc_shot_stats_rel(   ret_df, corsi_adj_factor = corsi_adj_factor )
+  ret_df <- calc_shot_stats_rel(   ret_df, corsi_adj = corsi_adj_factor, fenwick_adj = fenwick_adj_factor, shot_adj = shot_adj_factor )
   ret_df <- ret_df %>% mutate(
                                 # toi_pct = round( toi /(toi + toi_off) * 100, 3),
                                 # toi_gm  = round( toi / gm, 3),
@@ -634,6 +657,10 @@ if( !group_team ) ret_df <- ret_df %>% mutate( team_short = "NHL" )
     cf_pct_off,
     cf_pct_rel,
     # adj team shot stats
+    sf_adj,
+    sa_adj,
+    sf_pct_adj,
+    sf_pct_rel_adj,
     ff_adj,
     fa_adj,
     ff_pct_adj,
@@ -659,12 +686,14 @@ if( !group_team ) ret_df <- ret_df %>% mutate( team_short = "NHL" )
     sf_i,
     ff_i,
     cf_i,
+    sf_i_gm,
     a1,
     a2,
     hit_i,
     hit_by_i,
     pen_i,
     pen_draw_i,
+    pen_diff_i,
     pim,
     zs_o,
     zs_n,
@@ -723,17 +752,23 @@ if( !group_team ) ret_df <- ret_df %>% mutate( team_short = "NHL" )
     sa_off,
     ff_off,
     fa_off,
-    ff_off_adj,
-    fa_off_adj,
     cf_off,
     ca_off,
-    cf_off_adj,
-    ca_off_adj,
     zs_o_pct_off,
     gf_pct_off,
     sf_pct_off,
     ff_pct_off,
     cf_pct_off,
+    # adj
+    sf_off_adj,
+    sa_off_adj,
+    ff_off_adj,
+    fa_off_adj,
+    cf_off_adj,
+    ca_off_adj,
+    # adj pcts
+    sf_pct_off_adj,
+    ff_pct_off_adj,
     cf_pct_off_adj
     )
 

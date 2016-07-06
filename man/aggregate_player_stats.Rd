@@ -9,7 +9,8 @@ aggregate_player_stats(start_date = NULL, end_date = NULL,
   session_id = NULL, period = "all", strength = "all",
   score_diff = "all", team_only = FALSE, h2h_stats = FALSE,
   group_team = FALSE, home_away = "all", ignore_team_games = NULL,
-  nhl_db = NULL, corsi_adj_factor = 0.25)
+  nhl_db = NULL, corsi_adj_factor = 0.15, fenwick_adj_factor = 0.1,
+  shot_adj_factor = 0.05)
 }
 \arguments{
 \item{start_date}{String of date in YYYY-MM-DD format. Default is NULL which is fine if specifying by season}
