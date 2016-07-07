@@ -1,9 +1,6 @@
 library( njdanalytics )
-library( knitr ); library( printr );
-library( zoo )
 
 nhl_db <- setup_nhl_db()
-# source( "/media/driveb/projects/nhl/Vault//R/db/player_stats_fn.R" )
 
 team_score   <- tbl( nhl_db, "team_score"   )
 player_tbl   <- tbl( nhl_db, "player" ) %>% collect()
@@ -11,21 +8,21 @@ stage_roster <- tbl( nhl_db, "stage_roster" )
 gp_tbl       <- tbl( nhl_db, "game_player"  )
 h2h_tbl      <- tbl( nhl_db, "game_h2h"     )
 
-# player season team ------------------------------------------------------
-
-player_season_team <- stage_roster %>% select( season, session_id, nhl_id, team_short, game_date ) %>%
-  group_by( season, session_id, nhl_id, team_short ) %>% summarize(
-    first_game_date = min( game_date )
-  ) %>% collect()
-
-player_team <- player_season_team %>% ungroup() %>% arrange( nhl_id, first_game_date ) %>%
-  group_by( nhl_id, season, session_id ) %>%
-  summarise(
-    teams     = paste0( team_short, collapse="/" ),
-    num_teams = n()
-  ) %>% ungroup()
-
-save( player_season_team, player_team, file=paste0(nhl_dir$db, "/player_team_2016.RData"))
+# # player season team ------------------------------------------------------
+#
+# player_season_team <- stage_roster %>% select( season, session_id, nhl_id, team_short, game_date ) %>%
+#   group_by( season, session_id, nhl_id, team_short ) %>% summarize(
+#     first_game_date = min( game_date )
+#   ) %>% collect()
+#
+# player_team <- player_season_team %>% ungroup() %>% arrange( nhl_id, first_game_date ) %>%
+#   group_by( nhl_id, season, session_id ) %>%
+#   summarise(
+#     teams     = paste0( team_short, collapse="/" ),
+#     num_teams = n()
+#   ) %>% ungroup()
+#
+# save( player_season_team, player_team, file=paste0(nhl_dir$db, "/player_team_2016.RData"))
 
 load( file=paste0(nhl_dir$db, "/player_team_2016.RData") )
 # jagr 8448208
@@ -169,7 +166,9 @@ for( i in 1:length(season_ends) ) {
     group_team = FALSE, # if TRUE, player w two teams will appear twice, e.g., Jagr on NJD and FLA with separate stats.
     nhl_db = nhl_db
   )
-  this_player_season_comp_en <- this_player_season_comp_en[ , !is.na(season_cols$comp_en) ]
+
+  season_cols_comp_en <- season_cols %>% filter( !is.na(comp_en) ) %>% select( col ) %>% unlist() %>% as.character()
+  this_player_season_comp_en <- this_player_season_comp_en[ , season_cols_comp_en ]
   names( this_player_season_comp_en )[-1] <- paste0( names( this_player_season_comp_en )[-1], "_comp_en" )
 #
   message( "Aggregate own EN" )
@@ -184,7 +183,8 @@ for( i in 1:length(season_ends) ) {
     group_team = FALSE, # if TRUE, player w two teams will appear twice, e.g., Jagr on NJD and FLA with separate stats.
     nhl_db = nhl_db
   )
-  this_player_season_own_en <- this_player_season_own_en[ , !is.na(season_cols$own_en)]
+  season_cols_own_en <- season_cols %>% filter( !is.na(own_en) ) %>% select( col ) %>% unlist() %>% as.character()
+  this_player_season_own_en <- this_player_season_own_en[ , season_cols_own_en ]
   names( this_player_season_own_en )[-1] <- paste0( names( this_player_season_own_en )[-1], "_own_en" )
 
   this_player_stats <- this_player_season_all
