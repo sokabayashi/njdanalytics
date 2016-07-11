@@ -219,8 +219,8 @@ aggregate_player_stats <- function(
   if( team_only ) {
     gp_df  <- tbl( nhl_db, "game_player" ) %>% filter( nhl_id < 100 )
     h2h_df <- tbl( nhl_db, sql("SELECT * FROM game_h2h limit 1")) %>%
-              collect() %>% slice(0)
-    team_tbl <- tbl( nhl_db, "team" ) %>% collect() %>%
+              collect(n=Inf) %>% slice(0)
+    team_tbl <- tbl( nhl_db, "team" ) %>% collect(n=Inf) %>%
       filter(
         !name_short %in% ( c("PHX", "ATL" ) )
       )
@@ -233,7 +233,7 @@ aggregate_player_stats <- function(
     h2h_df <- tbl( nhl_db, "game_h2h"    )
   } else {
     h2h_df <- tbl( nhl_db, sql("SELECT * FROM game_h2h limit 1") ) %>%
-      collect() %>% slice(0)
+      collect(n=Inf) %>% slice(0)
   }
 
   ## STRENGTH FILTER
@@ -380,7 +380,7 @@ aggregate_player_stats <- function(
     ignore_games <- data.frame()
     for( ignore_opp in ignore_team_games ) {
       ignore_set <- gp_df %>% filter( nhl_id < 100, team_short == ignore_opp ) %>%
-        select( season, session_id, game_id4 ) %>% collect()
+        select( season, session_id, game_id4 ) %>% collect(n=Inf)
       if( nrow( ignore_set) ) {
         ignore_games <- rbind( ignore_games, ignore_set )
       }
@@ -412,7 +412,7 @@ aggregate_player_stats <- function(
     if( date_range_flag )  stop( "game subsets for date ranges not supported.")
 
     # Take the 1st n games or last n games
-    # team_score <- team_score %>% collect()
+    # team_score <- team_score %>% collect(n=Inf)
     game_id4_subset <- c()
     if( subset_head_tail == "head" ) {
       # ret_df <- ret_df %>% arrange( game_date )
@@ -420,26 +420,26 @@ aggregate_player_stats <- function(
       team_date_cutoff <- team_score %>% filter( game_number == subset_count ) %>%
                             select( team_short, cutoff_date=game_date )
 
-      # ret_df <- ret_df %>% collect() %>% left_join( team_date_cutoff, by ="team_short" )
+      # ret_df <- ret_df %>% collect(n=Inf) %>% left_join( team_date_cutoff, by ="team_short" )
       ret_df <- ret_df %>% left_join( team_date_cutoff, by ="team_short" )
       ret_df <- ret_df %>% filter( game_date <= cutoff_date )
 
    } else if( subset_head_tail == "tail" ) {
       # ret_df <- ret_df %>% arrange( desc(game_date) )
-      max_game_number <- team_score %>% select( game_number ) %>% collect() %>% max()
+      max_game_number <- team_score %>% select( game_number ) %>% collect(n=Inf) %>% max()
       min_game_number <- max_game_number - subset_count + 1
       team_date_cutoff <- team_score %>% filter( game_number == min_game_number ) %>%
         select( team_short, cutoff_date=game_date )
 
-      # ret_df <- ret_df %>% collect() %>% left_join( team_date_cutoff, by ="team_short" )
+      # ret_df <- ret_df %>% collect(n=Inf) %>% left_join( team_date_cutoff, by ="team_short" )
       ret_df <- ret_df %>% left_join( team_date_cutoff, by ="team_short" )
       ret_df <- ret_df %>% filter( game_date >= cutoff_date )
     }
 
-    # I did not want to do the collect() here, but there seems to be an issue with
+    # I did not want to do the collect(n=Inf) here, but there seems to be an issue with
     # applying a filter() after the group_by()...
     # 6/29/15: I actually now think this is bc of the left_join, not the filter.
-    # ret_df <- ret_df %>% collect() %>% filter( row_number() <= subset_count )
+    # ret_df <- ret_df %>% collect(n=Inf) %>% filter( row_number() <= subset_count )
   }
 
   ret_df <- ret_df %>%
@@ -494,7 +494,7 @@ aggregate_player_stats <- function(
               cf_off     = sum( cf_off     ),
               ca_off     = sum( ca_off     )
 
-              ) %>% ungroup() %>% collect()
+              ) %>% ungroup() %>% collect(n=Inf)
 
   # Replace NA with 0 for non-G and non-team.
   ret_df$position_fd[ ret_df$nhl_id < 100 ] <- "T"
@@ -512,7 +512,7 @@ aggregate_player_stats <- function(
 
   # h2h data ----------------------------------------------------------------
 
-  if( !nrow( h2h_df ) ) {
+  if( !h2h_stats ) {
     ret_df <- ret_df %>% mutate(
       toi_pct_comp_d = NA,
       toi_pct_comp_f = NA,
@@ -540,7 +540,7 @@ aggregate_player_stats <- function(
           summarize(
             toi_share_p1 = sum( toi_period_1 ), # na.rm not needed in SQL!
             toi_share_p2 = sum( toi_period_2 )
-          ) %>% collect() %>% mutate(
+          ) %>% collect(n=Inf) %>% mutate(
             toi_share = sum( toi_share_p1, toi_share_p2, na.rm=T )
           )
     } else {
@@ -554,7 +554,7 @@ aggregate_player_stats <- function(
             toi_share = sum( period_col ) # na.rm not needed in SQL!
           ),
         list( period_col = as.name(period_col) )
-      ) ) %>% collect()
+      ) ) %>% collect(n=Inf)
     }
 
     toi_df <- toi_df %>% left_join( ret_df %>% select( nhl_id_1=nhl_id, toi_1=toi ), by="nhl_id_1" ) %>%
