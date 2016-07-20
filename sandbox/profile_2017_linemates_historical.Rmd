@@ -480,7 +480,7 @@ p.linemate_season <- ggplot( top_linemate_season_m, aes(x=season_end, y=toi_rank
 p.linemate_season +
   geom_tile( aes( fill=toi_pct ), color="white", size=0.3 ) +
   scale_fill_gradient( low="white", high=few_blue, guide=FALSE, space="Lab" ) +
-  geom_text( aes(x=season_end+0.3, y=toi_rank, label=toi_label), size=geom_text_size, vjust = 0.1, hjust = 1 ) + 
+  geom_text( aes(x=season_end+0.3, y=toi_rank, label=toi_label), size=geom_text_size, vjust = 0.4, hjust = 1 ) + 
   # scale_y_continuous( "", breaks=seq(0, 120, 20), limits=c(0, 100) ) +
   scale_x_continuous( breaks=this_player_seasons$season_end, labels=this_player_seasons$season_age_label, expand = c(0, 0) ) + 
   line_chart_theme +
