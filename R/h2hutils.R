@@ -18,7 +18,7 @@ get_linemates_by_game <- function(
   game_h2h,
   this_player_team_games ) {
 
-  this_player <- player_tbl %>% filter( first_last_name==this_player_name ) %>% collect()
+  this_player <- player_tbl %>% filter( first_last_name==this_player_name ) %>% collect(n=Inf)
   this_player_num_last_name <- paste( this_player$number, this_player$last_name )
   this_player_id            <- this_player$nhl_id %>% as.numeric()
   this_player_fd            <- this_player$position_fd
@@ -28,9 +28,9 @@ get_linemates_by_game <- function(
 #  # A more advanced version of this function should provide a df with game_number, game_id4
   # this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
   #                                   select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
-  #                                   arrange( game_date ) %>% collect()
+  #                                   arrange( game_date ) %>% collect(n=Inf)
 
-  this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect()
+  this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect(n=Inf)
   if( this_session_id == "all" ) {
     these_session_ids <- c( "2", "3" )
   } else {
@@ -41,7 +41,7 @@ get_linemates_by_game <- function(
   linemates <- game_h2h %>% filter( season==this_season, session_id %in% these_session_ids, game_id4 %in% this_player_team_games$game_id4,
                                     filter_score_diff=="all", filter_strength=="ev5on5",
                                     nhl_id_1==this_player_id, team_comp=="T" ) %>%
-                            group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect()
+                            group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect(n=Inf)
   linemates <- linemates %>% left_join( player_tbl %>%
                                         select( nhl_id_2=nhl_id, number_2=number, last_name_2=last_name, position_fd_2=position_fd ),
                                         by="nhl_id_2" ) %>%
@@ -112,7 +112,7 @@ get_player_stats_by_game <- function(
   this_player_team_games,
   overwrite_ev5on5_toi=TRUE ) {
 
-  this_player <- player_tbl %>% filter( first_last_name==this_first_last_name ) %>% collect()
+  this_player <- player_tbl %>% filter( first_last_name==this_first_last_name ) %>% collect(n=Inf)
   this_player_num_last_name <- paste( this_player$number, this_player$last_name )
   this_player_id            <- this_player$nhl_id %>% as.numeric()
   this_player_fd            <- this_player$position_fd
@@ -125,7 +125,7 @@ get_player_stats_by_game <- function(
   gp <- game_player %>%
         filter( nhl_id==this_player_id, season==this_season, session_id %in% these_session_ids,
                 filter_period=="all", filter_score_diff=="all", filter_strength %in% c( "all", "ev5on5", "pp", "sh" )
-        ) %>% collect()
+        ) %>% collect(n=Inf)
 
 
   # this_team_short           <- this_player$team_short
@@ -134,9 +134,9 @@ get_player_stats_by_game <- function(
   # A more advanced version of this function should provide a df with game_number, game_id4
   # this_team_games <- team_score %>% filter( season==this_season, session_id==this_session_id, team_short==this_team_short ) %>%
   #   select( game_number, season, session_id, game_id4, ha, opp_team_short ) %>%
-  #   arrange( game_date ) %>% collect()
+  #   arrange( game_date ) %>% collect(n=Inf)
 
-  this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect()
+  this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect(n=Inf)
 
   gp_select <- gp %>% select( game_date, game_id4, filter_strength,
                         toi, toi_pct,
