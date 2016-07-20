@@ -101,6 +101,7 @@ if( !nrow(player_bio) ) {
 
 player_gp  <- gp_tbl %>% filter( nhl_id == player_bio$nhl_id, filter_period=="all", filter_score_diff=="all" )
 player_hr  <- hr_tbl %>% filter( first_last_name == hr_player_name, birth_date==player_bio$birth_date ) %>% select(-id) %>% collect()
+player_h2h <- season_h2h %>% filter( nhl_id_1 == player_bio$nhl_id ) %>% select(-id)
 
 #######
 #### AGE NEEDS UPDATE after 9/15/16
@@ -129,7 +130,8 @@ if( draft_year=="Undrafted" ) draft_info <- "Undrafted"
 ```{r player all seasons info}
 # don't go too far back
 earliest_season_db <- "20112012"
-player_gp <- player_gp %>% filter( season >= earliest_season_db )
+player_gp  <- player_gp  %>% filter( season >= earliest_season_db )
+player_h2h <- player_h2h %>% filter( season >= earliest_season_db )
 
 this_player_seasons_all <- player_gp %>% 
                   filter( session_id==this_session_id, filter_strength=="all" ) %>% 
@@ -221,7 +223,7 @@ if( use_2y_1y_ago ) {
 **NHL Seasons:** `r seasons_played`
 **Draft year:** `r draft_info`
 
-```{r career regular season data} 
+```{r career team changes} 
 # data for top charts, across seasons
 reg_season_teams <- player_gp %>% filter( session_id=="2", filter_strength=="all" ) %>% 
                                   select( season, game_date, team_short ) %>% distinct() %>% collect() %>% arrange( game_date )
@@ -256,7 +258,7 @@ num_team_seasons <- nrow( player_teams )
 
 ```
 
-```{r}
+```{r ma function declaration}
 add_ma_series <- function( this_game_player, variable, filter_strength="all", ma_window_size=5 ) {
   df <- this_game_player %>% filter( filter_strength=="all" )
   df <- df[ , c( "player_game_number", variable ) ]
@@ -306,7 +308,7 @@ career_point <- geom_point( color=gp_color, size=career_point_size )
 geom_text_size = 2.0
 
 line_chart_theme <- theme_bw() + theme(
-        plot.title = element_text(size=8),
+        plot.title = element_text(size=7),
         axis.title.y = element_blank(), 
         axis.title.x = element_blank(), 
         axis.text.y  = element_text(size=6),
@@ -318,8 +320,7 @@ line_chart_theme <- theme_bw() + theme(
         legend.position="none", legend.text=element_text(size=5.5), legend.margin=unit(-0.5, "lines"),
         legend.background = element_rect(fill=alpha('blue', 1)), 
   
-        plot.margin = unit( c(0.5, 0.2, 0, 0.5), units="lines"), # top right bottoom left
-        plot.title  = element_text(size=7.5 ), # face="bold"
+        plot.margin = unit( c(0.3, 0.2, 0, 0.4), units="lines"), # top right bottoom left
   
         strip.text.x = element_text(size=10),
         strip.text.y = element_text(size=10),
@@ -381,7 +382,6 @@ comp_position_fd <- ifelse( player_bio$position_fd == "D", "Defensemen", "Forwar
 ```
 
 
-
 ```{r this player stats by season}
 this_player_season <- player_season_all %>% 
   filter( nhl_id == player_bio$nhl_id, season >= min_season_db, !season %in% bundled_seasons ) %>% 
@@ -394,6 +394,30 @@ this_player_season <- this_player_season %>% mutate(
 this_player_season <- this_player_season %>% left_join( this_player_seasons %>% select( season_end, season_age_label ),
                                           by="season_end" ) 
 ```
+
+```{r this player linemates by season}
+this_player_linemates <- player_h2h %>% 
+                          filter( session_id=="2", team_comp=="T", position_fd_2==player_bio$position_fd, last_name_2 != last_name_1 ) %>% 
+                          collect()
+
+top_linemate_season <- this_player_linemates %>%
+                        group_by( season, nhl_id_1, last_name_1 ) %>%
+                        arrange( season, desc(toi_ev5on5) ) %>% top_n(n=4, wt=toi_ev5on5 )
+
+top_linemate_season_m <- top_linemate_season %>% ungroup() %>% 
+                          group_by( season ) %>%
+                          arrange( season, toi_pct ) %>%
+                          mutate(
+                            toi_season_pct = round( toi_pct/sum(toi_pct)*100, 1 ),
+                            # cumsum_toi_pct   = cumsum(toi_season_pct ),
+                            toi_rank       = row_number(),
+                            toi_label      = paste0( last_name_2, "  ", round(toi_pct), "%" )
+)
+top_linemate_season_m <- top_linemate_season_m %>% left_join( this_player_seasons %>% select( season, season_end, season_age_label ),
+                                          by="season" ) 
+```
+
+
 
 ```{r player team chart params}
 player_teams <- player_teams %>% mutate(
@@ -428,6 +452,15 @@ season_text <- ifelse( num_seasons > 1, paste( num_seasons, "Seasons" ), "Season
 
 ```
 
+
+
+
+
+
+
+
+
+
 ### Last `r season_text` (Regular)
 
 ```{r career GP,fig.width=2.7, fig.height=1.1}
@@ -448,23 +481,52 @@ p.gp +
   line_chart_theme + scale_color_few() +
   ggtitle( "Games Played" ) 
 ```
-```{r career linemates,fig.width=5.3, fig.height=1.1}
-team_y_min <- 0
-y_gp_min   <- ( min( this_player_seasons$gm )*.9 ) %>% round()
-y_gp_max   <- ( max( this_player_seasons$gm )*1.2 ) %>% round()
-team_y_min <- y_gp_min
+```{r career linemates,fig.width=5.4, fig.height=1.1}
+p.linemate_season <- ggplot( top_linemate_season_m, aes(x=season_end, y=toi_rank) )
+p.linemate_season +
+  geom_tile( aes( fill=toi_pct ), color="white", size=0.3 ) +
+  scale_fill_gradient( low="white", high=few_lightblue, guide=FALSE, space="Lab" ) +
+  geom_text( aes(x=season_end+0.3, y=toi_rank, label=toi_label), size=geom_text_size, vjust = 0.1, hjust = 1 ) + 
+  # scale_y_continuous( "", breaks=seq(0, 120, 20), limits=c(0, 100) ) +
+  scale_x_continuous( breaks=this_player_seasons$season_end, labels=this_player_seasons$season_age_label, expand = c(0, 0) ) + 
+  line_chart_theme +
+  theme( 
+    axis.text.y  = element_blank(),
+    axis.ticks   = element_blank(),
+    # plot.margin = unit( c(0.3, 0.2, 0, 0.4), units="lines"), # top right bottoom left
+    plot.margin = unit( c(0.3, 2, 0, 0.4), units="lines") # top right bottoom left
+    # panel.margin = unit(0,"null")
+    ) +
+  ggtitle( "Top Linemates (Pct of Player's 5v5 TOI)" ) 
 
-p.gp <- ggplot( this_player_seasons, aes(x=season_end, y=gm) )
-p.gp + 
-  team_lines + 
-  geom_line(  color=gp_color, size=career_line_size ) +
-  geom_point( color=gp_color, size=career_point_size ) +
-  team_texts + 
-  geom_text( aes(label=gm), vjust=-1, size=geom_text_size ) +
-  scale_y_continuous( "Games Played", breaks=seq(0, 120, 20), limits=c(y_gp_min, y_gp_max) ) +
-  scale_x_continuous( breaks=this_player_seasons$season_end, labels=this_player_seasons$season_age_label ) + 
-  line_chart_theme + scale_color_few() +
-  ggtitle( "Games Played" ) 
+# p.linemates <- p.linemates + 
+#   geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
+#   geom_text( data=game_dates, aes(label=date_opponent_win_loss, y=-1), color=few_darkblue, angle=90, size=1.3, hjust=0 ) +
+#   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
+#   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
+#   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) +
+#   geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
+#   # scale_x_continuous( limits=c(1,60), breaks=seq(0,120,10) ) + 
+#   # scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
+#   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.,120,10), expand = c(0, 0)) +
+#   scale_y_discrete( "Linemate", expand = c(0, 0)) +
+#   # labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
+#   theme_minimal() +
+#   theme(
+#       axis.ticks = element_blank(),
+#       # axis.ticks.length = unit(0.1, "cm"),
+#       legend.position = "none",
+#       plot.margin  = rep(unit(0,"lines"),4),
+#       panel.margin = unit(0,"null"),
+#       # panel.grid.major.y = element_blank(), #element_line( colour="white" ),
+#       panel.grid.major=element_blank(),
+#       # panel.grid.minor = element_line( colour="black" ),
+#       axis.title.y = element_text( size = rel(0.5)  ),
+#       axis.title.x = element_text( size = rel(0.5)  ),
+#       axis.text.y  = element_text( size = base_size ),
+#       axis.text.x  = element_text( size = base_size )
+#     ) 
+
 ```
 
 
@@ -477,10 +539,10 @@ team_y_min <- y_lim_min_toi_gm
 
 p.toi <- ggplot( this_player_seasons, aes(x=season_end, y=toi_gm) )
 p.toi + 
+  geom_hline( yintercept=c(15,20), size=0.5, color="lightblue" ) + 
   team_lines + 
   geom_line(  color=toi_color, size=career_line_size ) +
   geom_point( color=toi_color, size=career_point_size ) +
-  geom_hline( yintercept=c(15,20), size=0.5, color="lightblue", alpha=0.6 ) + 
   team_texts + 
   geom_text( aes(label=round(toi_gm,1) ), vjust=-1, size=geom_text_size ) +
   scale_y_continuous( "", breaks=seq( 0, 35, 2),  limits=c(y_lim_min_toi_gm,y_lim_max_toi_gm) ) +  
@@ -498,10 +560,10 @@ team_y_min <- y_lim_min_cf
 
 p.cf <- ggplot( this_player_season, aes(x=season_end, y=cf_pct_adj_ev5on5, label=round(cf_pct_adj_ev5on5,1) ) )
 p.cf + 
+  geom_hline( yintercept=c(50), size=0.5, color="lightblue" ) + 
   team_lines + 
   geom_line(  color=cf_color, size=career_line_size ) +
   geom_point( color=cf_color, size=career_point_size ) +
-  geom_hline( yintercept=c(50), size=0.5, color="lightblue", alpha=0.9 ) + 
   team_texts + 
   geom_text( vjust=-1, size=geom_text_size ) +
   scale_y_continuous( "", breaks=seq(0,100,2),  limits=c(y_lim_min_cf,y_lim_max_cf) ) +  
@@ -510,7 +572,7 @@ p.cf +
   ggtitle( "Adj Corsi% (5v5)") 
 ```
 ```{r career Pts per Game,fig.width=2.7, fig.height=1.1}
-y_lim_min_pts_gm <- 0
+y_lim_min_pts_gm <- min( this_player_seasons$pts_gm ) * 0.8
 y_lim_max_pts_gm <- max( this_player_seasons$pts_gm ) * 1.3
 team_y_min <- y_lim_min_pts_gm
 
@@ -520,7 +582,7 @@ p.pts_gm +
   geom_line(  color=pts_color, size=career_line_size ) +
   geom_point( color=pts_color, size=career_point_size ) +
   geom_text( aes(label=round(pts_gm,2) ), vjust=-1, size=geom_text_size ) +
-  scale_y_continuous( "", breaks=seq( 0, 5, 0.2), limits=c(y_lim_min_pts_gm,y_lim_max_pts_gm) ) +
+  scale_y_continuous( "", breaks=seq( 0, 5, 0.1), limits=c(y_lim_min_pts_gm,y_lim_max_pts_gm) ) +
   scale_x_continuous( breaks=this_player_seasons$season_end, labels=this_player_seasons$season_age_label) +
   line_chart_theme + scale_color_few() +
   ggtitle( "Points/Game")
@@ -569,10 +631,10 @@ team_y_min <- y_lim_min_cf_rel
 
 p.cf <- ggplot( this_player_season, aes(x=season_end, y=cf_pct_rel_adj_ev5on5, label=round(cf_pct_rel_adj_ev5on5,1) ) )
 p.cf + 
+  geom_hline( yintercept=c(0), size=0.5, color="lightblue" ) + 
   team_lines + 
   geom_line(  color=cf_rel_color, size=career_line_size ) +
   geom_point( color=cf_rel_color, size=career_point_size ) +
-  geom_hline( yintercept=c(0), size=0.5, color="lightblue", alpha=0.9 ) + 
   team_texts + 
   geom_text( vjust=-1, size=geom_text_size ) +
   scale_y_continuous( "", breaks=seq(-50,100,2),  limits=c(y_lim_min_cf_rel,y_lim_max_cf_rel) ) +  
@@ -584,8 +646,8 @@ p.cf +
 # theme_set(theme_gray(base_size = 9))
 this_var <- "p_60_ev5on5"
 
-# y_lim_min_p_60 <- min( this_player_season[ ,this_var] ) *.7
-y_lim_min_p_60 <- 0
+y_lim_min_p_60 <- min( this_player_season[ ,this_var] ) *.8
+# y_lim_min_p_60 <- 0
 
 y_lim_max_p_60 <- max( this_player_season[ ,this_var]) *1.3
 team_y_min <- y_lim_min_p_60
@@ -769,16 +831,16 @@ p.stats <- p.stats +
   theme_bw(base_size = 10) +
   # scale_fill_few(palette = "dark") + 
   theme( 
-         plot.title = element_text(size=8),
+         plot.title = element_text(size=7),
          axis.title.y=element_text(hjust=-2), 
          axis.ticks.length=unit(.2, "lines"), 
          axis.ticks.y = element_blank(), 
          axis.text.y  = element_text(size=7), 
-         # axis.text.x  = element_text(size=7), 
+         axis.text.x  = element_text(size=9),
          legend.position="none",
          plot.title = element_text(size = 8.5, vjust=0.5 ),
          axis.line = element_line(colour = "black",size=0.2),
-         plot.margin = unit( c(0.2, 0.2, 0, 0.5), units="lines"), # top right bottom left
+         plot.margin = unit( c(0.1, 0.2, 0, 0.3), units="lines"), # top right bottom left
          panel.border = element_blank(),
          panel.background = element_blank()
          # plot.margin=unit( c(2, 0, 0, 0), units="cm") # top right bottoom left  ) +
