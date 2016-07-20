@@ -361,8 +361,13 @@ theme_chances <- theme_minimal() + theme(
 bundled_seasons <- c( "20132016", "20132015", "20142016" )
 # player_season_all
 load( file=paste0( nhl_dir$db, "/player_season_2016.RData") )
-comparison_vars <- read_csv( file=paste0(nhl_dir$db, "/player_comparison_cols.csv"), na="" )
+comparison_vars <- read_csv( file=paste0(nhl_dir$db, "/player_comparison_cols.csv"), na="", trim_ws=F )
 comparison_vars$format_pct[is.na(comparison_vars$format_pct) ] <-""
+
+drop_cols <- c( "sf_i_gm_ev5on5" )
+comparison_vars <- comparison_vars %>% filter( !comp_col %in% drop_cols )
+
+
 gm_requirement <- 30
 # gm_requirement <- 10
 toi_gm_requirement <- 5
@@ -828,7 +833,8 @@ p.stats
 this_season <- "20152016"
 # this_season <- "20142015"
 this_season_gm_min <- 20
-toi_comparison_vars <- comparison_vars %>% filter( category=="toi" )
+recent_season_categories <- c( "toi", "toi_pct", "zs" )
+toi_comparison_vars <- comparison_vars %>% filter( category %in% recent_season_categories )
 
 p.toi_comp <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, this_season = this_season, player_seasons, player_tbl, toi_comparison_vars, recent=TRUE, gm_requirement=this_season_gm_min )
 
@@ -838,7 +844,7 @@ p.toi_comp <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, t
 ```{r  main bar last 2 years, fig.width=8, fig.height=3}
 this_season <- "20142016"
 # this_season <- "20132015"
-nontoi_comparison_vars <- comparison_vars %>% filter( !category %in% c("toi", "bio") )
+nontoi_comparison_vars <- comparison_vars %>% filter( !category %in% c( "bio", recent_season_categories ) )
 p.pts_comp <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, this_season = this_season, player_seasons, player_tbl, nontoi_comparison_vars)
 
 # p.pts_comp
