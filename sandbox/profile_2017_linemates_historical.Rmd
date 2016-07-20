@@ -49,7 +49,7 @@ use_2y_1y_ago <- F
 # player_name <- "Matthew Carle"
 player_name <- "Marcus Johansson"
 # player_name <- "Patrick Wiercioch"
-# player_name <- "David Schlemko"
+# player_name <- "Kyle Palmieri"
 
 # player_name <- "Andrew Shaw"
 # player_name <- "Viktor Stalberg"
@@ -418,7 +418,6 @@ top_linemate_season_m <- top_linemate_season_m %>% left_join( this_player_season
 ```
 
 
-
 ```{r player team chart params}
 player_teams <- player_teams %>% mutate(
   last_season_xintercept = season_end + 0.5,
@@ -449,14 +448,7 @@ if( num_team_seasons > 1 ) {
 }
 
 season_text <- ifelse( num_seasons > 1, paste( num_seasons, "Seasons" ), "Season" )
-
 ```
-
-
-
-
-
-
 
 
 
@@ -481,11 +473,13 @@ p.gp +
   line_chart_theme + scale_color_few() +
   ggtitle( "Games Played" ) 
 ```
-```{r career linemates,fig.width=5.4, fig.height=1.1}
+```{r career linemates,fig.width=5.7, fig.height=1.1}
+title_linemate <- sprintf( "Top Linemates (Pct of %s's Total 5v5 TOI)", player_bio$last_name ) 
+
 p.linemate_season <- ggplot( top_linemate_season_m, aes(x=season_end, y=toi_rank) )
 p.linemate_season +
   geom_tile( aes( fill=toi_pct ), color="white", size=0.3 ) +
-  scale_fill_gradient( low="white", high=few_lightblue, guide=FALSE, space="Lab" ) +
+  scale_fill_gradient( low="white", high=few_blue, guide=FALSE, space="Lab" ) +
   geom_text( aes(x=season_end+0.3, y=toi_rank, label=toi_label), size=geom_text_size, vjust = 0.1, hjust = 1 ) + 
   # scale_y_continuous( "", breaks=seq(0, 120, 20), limits=c(0, 100) ) +
   scale_x_continuous( breaks=this_player_seasons$season_end, labels=this_player_seasons$season_age_label, expand = c(0, 0) ) + 
@@ -493,39 +487,11 @@ p.linemate_season +
   theme( 
     axis.text.y  = element_blank(),
     axis.ticks   = element_blank(),
-    # plot.margin = unit( c(0.3, 0.2, 0, 0.4), units="lines"), # top right bottoom left
-    plot.margin = unit( c(0.3, 2, 0, 0.4), units="lines") # top right bottoom left
+    # plot.margin = unit( c(0.3, 0.2, 0, 0.4), units="lines"), # from line_chart_theme
+    plot.margin = unit( c(0.3, 2, 0, 0.4), units="lines") # top right bottom left
     # panel.margin = unit(0,"null")
     ) +
-  ggtitle( "Top Linemates (Pct of Player's 5v5 TOI)" ) 
-
-# p.linemates <- p.linemates + 
-#   geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
-#   geom_text( data=game_dates, aes(label=date_opponent_win_loss, y=-1), color=few_darkblue, angle=90, size=1.3, hjust=0 ) +
-#   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
-#   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
-#   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) +
-#   geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
-#   # scale_x_continuous( limits=c(1,60), breaks=seq(0,120,10) ) + 
-#   # scale_colour_manual(values=c( "black", "white"), guide=FALSE) +
-#   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.,120,10), expand = c(0, 0)) +
-#   scale_y_discrete( "Linemate", expand = c(0, 0)) +
-#   # labs( title = paste(this_player_name, season_str) ) +   ## title screws up all the spacing...
-#   theme_minimal() +
-#   theme(
-#       axis.ticks = element_blank(),
-#       # axis.ticks.length = unit(0.1, "cm"),
-#       legend.position = "none",
-#       plot.margin  = rep(unit(0,"lines"),4),
-#       panel.margin = unit(0,"null"),
-#       # panel.grid.major.y = element_blank(), #element_line( colour="white" ),
-#       panel.grid.major=element_blank(),
-#       # panel.grid.minor = element_line( colour="black" ),
-#       axis.title.y = element_text( size = rel(0.5)  ),
-#       axis.title.x = element_text( size = rel(0.5)  ),
-#       axis.text.y  = element_text( size = base_size ),
-#       axis.text.x  = element_text( size = base_size )
-#     ) 
+  ggtitle( title_linemate ) 
 
 ```
 
@@ -591,9 +557,6 @@ p.pts_gm +
 
 
 
-
-
-
 ```{r career TOI per Gm PP PK, fig.width=2.7, fig.height=1.1}
 y_lim_max_toi_gm_special <- max( 2, toi_special_by_season$toi_gm )*1.8
 
@@ -603,7 +566,7 @@ p.toi_special +
   geom_line(  aes(color=strength ), size=career_line_size ) +
   geom_point( aes(color=strength ), size=career_point_size ) +
   team_texts + 
-  geom_text( aes(label=round(toi_gm,1) ), vjust=-1, size=geom_text_size ) +
+  geom_text( aes(label=round(toi_gm,1) ), vjust=-1, size=geom_text_size, check_overlap=TRUE ) +
   scale_color_manual( name=NULL,
                      limits=c( "toi_gm_pp", "toi_gm_sh" ),
                      labels=c( "PP", "PK" ),
@@ -665,6 +628,9 @@ p.p60 +
   line_chart_theme + scale_color_few() +
   ggtitle( "Points/60 (5v5)") 
 ```
+
+
+
 
 
 ```{r comparsion bullet chart fn}
@@ -858,8 +824,6 @@ p.stats
 
 ```
 
-### Compared to League
-
 ```{r  main bar recent, fig.width=8, fig.height=2}
 this_season <- "20152016"
 # this_season <- "20142015"
@@ -879,6 +843,10 @@ p.pts_comp <- generate_comparison_bullet_chart( this_nhl_id=player_bio$nhl_id, t
 
 # p.pts_comp
 ```
+
+
+### Compared to League
+
 
 ```{r combined comparison charts, fig.width=8, fig.height=5.}
 comparison_bar_charts <- rbind_plots( list( p.toi_comp, 
