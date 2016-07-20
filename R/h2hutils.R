@@ -33,12 +33,13 @@ get_linemates_by_game <- function(
   this_player_team_games <- this_player_team_games %>% arrange( game_date ) %>% collect(n=Inf)
   if( this_session_id == "all" ) {
     these_session_ids <- c( "2", "3" )
+    game_h2h <- game_h2h %>% filter( session_id %in% c(these_session_ids) )
   } else {
-    these_session_ids <- c( this_session_id )
+    game_h2h <- game_h2h %>% filter( session_id == this_session_id )
   }
 
   # dplyr 0.5 no longer allows arrange() within group
-  linemates <- game_h2h %>% filter( season==this_season, session_id %in% these_session_ids, game_id4 %in% this_player_team_games$game_id4,
+  linemates <- game_h2h %>% filter( season==this_season, game_id4 %in% this_player_team_games$game_id4,
                                     filter_score_diff=="all", filter_strength=="ev5on5",
                                     nhl_id_1==this_player_id, team_comp=="T" ) %>%
                             group_by( game_id4 ) %>% arrange( desc(toi_period_all) ) %>% collect(n=Inf)
