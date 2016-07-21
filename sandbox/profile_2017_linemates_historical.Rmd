@@ -37,15 +37,18 @@ knitr::opts_chunk$set(cache=FALSE, OutDec = ",")
 # Sometimes (e.g. Wierchioch) we want performance *prior* to most recent completed season
 use_2y_1y_ago <- F
 
+# player_name <- "Alex Ovechkin"
+# player_name <- "Erik Karlsson" # 8474578 BUG.  there are two Erik Karlsson
+# player_name <- "Brent Burns" # 8474578 BUG.  there are two Erik Karlsson
 # player_name <- "Nail Yakupov"
 # player_name <- "Colin Wilson"
 # player_name <- "Jaromir Jagr"
 # player_name <- "Mikkel Boedker"
 # player_name <- "Jordan Schroeder"
 # player_name <- "Darren Helm"
-player_name <- "Lee Stempniak"
+# player_name <- "Lee Stempniak"
 # player_name <- "Jacob Josefson"
-# player_name <- "Richard Panik"
+player_name <- "Richard Panik"
 # player_name <- "Matthew Carle"
 # player_name <- "Marcus Johansson"
 # player_name <- "Jiri Tlusty"
@@ -54,20 +57,12 @@ player_name <- "Lee Stempniak"
 
 # player_name <- "Andrew Shaw"
 # player_name <- "Jonathan Toews"
-# player_name <- "Matt Martin"
-# player_name <- "Drew Miller"
-# player_name <- "Beau Bennett"
-# player_name <- "Brandon Pirri"
-# player_name <- "Connor McDavid"
-# player_name <- "Kyle Quincey"
 # player_name <- "Jiri Hudler"
 # player_name <- "Adam Henrique"
 # player_name <- "P.K. Subban"
 # player_name <- "Tyson Barrie"
 # player_name <- "Yannick Weber"
-# player_name <- "Matt Bartkowski"
 # player_name <- "Jason Demers"
-# player_name <- "Korbinian Holzer"
 
 
 hr_player_name <- player_name
@@ -104,11 +99,11 @@ player_gp  <- gp_tbl %>% filter( nhl_id == player_bio$nhl_id, filter_period=="al
 player_hr  <- hr_tbl %>% filter( first_last_name == hr_player_name, birth_date==player_bio$birth_date ) %>% select(-id) %>% collect()
 player_h2h <- season_h2h %>% filter( nhl_id_1 == player_bio$nhl_id ) %>% select(-id)
 
-#######
-#### AGE NEEDS UPDATE after 9/15/16
-#######
-# age at start of NEXT season.  This will need to be updated depending on report run date
-player_age_915 <- player_bio$age_season_start + 1
+################
+#### AGE #######
+################
+# age at start of 2016-17 season.  This will need to be updated depending on report run date
+player_age_915 <- player_bio$age_season_start
 
 draft_year      <- player_bio$draft_year
 draft_round     <- player_bio$draft_round
@@ -793,12 +788,12 @@ p.stats <- p.stats +
   geom_errorbar( stat="identity", aes(x=variable,y=team_lead_ptile, ymin=team_lead_ptile, ymax=team_lead_ptile), 
                  width=bullet_width_outer, color="darkorange", size=0.85 ) +
     
-  scale_y_continuous( "", breaks=seq(0,1,0.1), limits=c(0,1.1), expand = c(0,0), label=percent ) + 
+  scale_y_continuous( "", breaks=seq(0,1,0.1), limits=c(0,1.15), expand = c(0,0), label=percent ) + 
   scale_x_discrete( "", breaks=comparison_vars$comp_col,
                         labels=comparison_vars$short_desc, expand=c(x_expand,0)
                     ) + coord_flip() + 
   geom_hline( yintercept=top_labels$percentile, color="cyan" ) +
-  geom_text( aes( label= bar_label ), hjust=-0.3, size=2.3, parse=F) +
+  geom_text( aes( label= bar_label, y=percentile+0.01 ), hjust= 0, size=2.3, parse=F) + # don't decrease size smaller than 2.3
   # scale_fill_pander() +
   theme_bw(base_size = 10) +
   # scale_fill_few(palette = "dark") + 
@@ -962,7 +957,7 @@ p.linemates <- p.linemates +
   theme_minimal() +
   theme(
       axis.ticks = element_blank(),
-      # axis.ticks.length = unit(0.1, "cm"),
+      axis.ticks.length = unit(0.1, "cm"),
       legend.position = "none",
       plot.margin  = rep(unit(0,"lines"),4),
       panel.margin = unit(0,"null"),
@@ -974,6 +969,7 @@ p.linemates <- p.linemates +
       axis.text.y  = element_text( size = base_size ),
       axis.text.x  = element_text( size = base_size )
     ) 
+# p.linemates
 ```
 
 
