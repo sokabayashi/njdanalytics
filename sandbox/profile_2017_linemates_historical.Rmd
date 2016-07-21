@@ -43,16 +43,17 @@ use_2y_1y_ago <- F
 # player_name <- "Mikkel Boedker"
 # player_name <- "Jordan Schroeder"
 # player_name <- "Darren Helm"
-# player_name <- "Lee Stempniak"
+player_name <- "Lee Stempniak"
 # player_name <- "Jacob Josefson"
 # player_name <- "Richard Panik"
 # player_name <- "Matthew Carle"
-player_name <- "Marcus Johansson"
+# player_name <- "Marcus Johansson"
+# player_name <- "Jiri Tlusty"
 # player_name <- "Patrick Wiercioch"
 # player_name <- "Kyle Palmieri"
 
 # player_name <- "Andrew Shaw"
-# player_name <- "Viktor Stalberg"
+# player_name <- "Jonathan Toews"
 # player_name <- "Matt Martin"
 # player_name <- "Drew Miller"
 # player_name <- "Beau Bennett"
@@ -364,7 +365,7 @@ load( file=paste0( nhl_dir$db, "/player_season_2016.RData") )
 comparison_vars <- read_csv( file=paste0(nhl_dir$db, "/player_comparison_cols.csv"), na="", trim_ws=F )
 comparison_vars$format_pct[is.na(comparison_vars$format_pct) ] <-""
 
-drop_cols <- c( "sf_i_gm_ev5on5" )
+drop_cols <- c( ) #"sf_i_gm_ev5on5" )
 comparison_vars <- comparison_vars %>% filter( !comp_col %in% drop_cols )
 
 
@@ -426,24 +427,28 @@ top_linemate_season_m <- top_linemate_season_m %>% left_join( this_player_season
 ```{r player team chart params}
 player_teams <- player_teams %>% mutate(
   last_season_xintercept = season_end + 0.5,
-  last_season_xtext      = season_end + 0.4
+  last_season_xtext      = season_end
 )
 
-current_team_x_adj <- 0.5
 if( num_team_seasons > 1 ) {
-  player_teams$last_season_xtext[-1] <- player_teams$last_season_xtext[-num_team_seasons] + 0.90 # trial and error
-  
-  player_teams <- player_teams %>% mutate(
-    last_season_xtext = ifelse( row_number(season) !=1 & str_detect( team_short, "\n"), 
-                                last_season_xtext+current_team_x_adj, last_season_xtext )
+  # first team, right justify to team change line
+  player_teams$last_season_xtext[ 1] <- player_teams$last_season_xtext[ 1 ] + 0.40 
+  # all others, put to just left of team change line
+  player_teams$last_season_xtext[-1] <- player_teams$last_season_xtext[-num_team_seasons] + 0.75 # trial and error
+
+  # if game numbers (multiple teams in a season), then push to right a bit more  
+  player_teams <- player_teams %>% ungroup() %>% mutate(
+    last_season_xtext = ifelse( row_number(season) !=1 & str_detect( team_short, "\n"),
+                                season_end - 0.08, last_season_xtext )
   )
 }
 
 if( num_team_seasons > 1 ) {
   team_lines <- geom_vline( data=player_teams[-num_team_seasons,],
-                            aes(xintercept=last_season_xintercept),color="darkorange",alpha=0.6, size=0.5)
+                            aes(xintercept=last_season_xintercept),color="orange",alpha=0.6, size=0.5)
   # hjust=1.
-  team_texts <- geom_text(  data=player_teams, aes(x=last_season_xtext, y=team_y_min, label=team_short ), hjust=1., vjust= 0, size=1.6 )
+  team_texts <- geom_text(  data=player_teams, aes(x=last_season_xtext, y=team_y_min, label=team_short ), 
+                            color="slateblue", hjust=1, vjust= 0, size=1.5 )
   
   # for three charts...
   # team_texts <- geom_text(  data=player_teams, aes(x=last_season_xtext, y=team_y_min, label=team_short ), hjust=1.2, vjust= 0, size=1.8 )
@@ -546,14 +551,18 @@ p.cf +
 y_lim_min_pts_gm <- min( this_player_seasons$pts_gm ) * 0.8
 y_lim_max_pts_gm <- max( this_player_seasons$pts_gm ) * 1.3
 team_y_min <- y_lim_min_pts_gm
+min_max_diff_pts_gm <- y_lim_max_pts_gm - y_lim_min_pts_gm
+y_break_step <- 0.1
+if( min_max_diff_pts_gm > 0.6 ) y_break_step <- 0.2
 
 p.pts_gm <- ggplot( this_player_seasons, aes(x=season_end, y=pts_gm) )
 p.pts_gm +
-  team_lines + team_texts +
+  team_lines + 
   geom_line(  color=pts_color, size=career_line_size ) +
   geom_point( color=pts_color, size=career_point_size ) +
+  team_texts +
   geom_text( aes(label=round(pts_gm,2) ), vjust=-1, size=geom_text_size ) +
-  scale_y_continuous( "", breaks=seq( 0, 5, 0.1), limits=c(y_lim_min_pts_gm,y_lim_max_pts_gm) ) +
+  scale_y_continuous( "", breaks=seq( 0, 5, y_break_step), limits=c(y_lim_min_pts_gm,y_lim_max_pts_gm) ) +
   scale_x_continuous( breaks=this_player_seasons$season_end, labels=this_player_seasons$season_age_label) +
   line_chart_theme + scale_color_few() +
   ggtitle( "Points/Game")
@@ -564,6 +573,7 @@ p.pts_gm +
 
 ```{r career TOI per Gm PP PK, fig.width=2.7, fig.height=1.1}
 y_lim_max_toi_gm_special <- max( 2, toi_special_by_season$toi_gm )*1.8
+team_y_min <- 0
 
 p.toi_special <- ggplot( toi_special_by_season, aes(x=season_end, y=toi_gm) )
 p.toi_special + 
@@ -647,7 +657,7 @@ season_end   <- substring(this_season,5,8) %>% as.numeric()
 n_seasons    <- season_end - season_begin
 
 if( n_seasons > 1 ) {
-  gm_requirement <- 25*n_seasons
+  gm_requirement <- 30*n_seasons
 } 
 
 recent_season_str <- paste( season_begin, season_end, sep="-")
@@ -778,16 +788,8 @@ if( position_fd=="D" ) {
   # geom_bar( stat="identity", aes(x=variable, y=remaining_F), fill="grey60", width=bullet_width_outer )
 }
 
-if( recent ){
 p.stats <- p.stats + 
-  geom_bar( stat="identity", fill="cornflowerblue", width=0.65 )  
-  
-} else {
-p.stats <- p.stats + 
-  geom_bar( stat="identity", aes(fill=category), width=0.65 )  
-}
-
-p.stats <- p.stats + 
+  geom_bar( stat="identity", aes(fill=category), width=0.65 ) + 
   geom_errorbar( stat="identity", aes(x=variable,y=team_lead_ptile, ymin=team_lead_ptile, ymax=team_lead_ptile), 
                  width=bullet_width_outer, color="darkorange", size=0.85 ) +
     
@@ -798,7 +800,6 @@ p.stats <- p.stats +
   geom_hline( yintercept=top_labels$percentile, color="cyan" ) +
   geom_text( aes( label= bar_label ), hjust=-0.3, size=2.3, parse=F) +
   # scale_fill_pander() +
-  scale_fill_few(palette = "dark") +
   theme_bw(base_size = 10) +
   # scale_fill_few(palette = "dark") + 
   theme( 
@@ -807,7 +808,7 @@ p.stats <- p.stats +
          axis.ticks.length=unit(.2, "lines"), 
          axis.ticks.y = element_blank(), 
          axis.text.y  = element_text(size=7), 
-         axis.text.x  = element_text(size=9),
+         axis.text.x  = element_text(size=8),
          legend.position="none",
          plot.title = element_text(size = 8.5, vjust=0.5 ),
          axis.line = element_line(colour = "black",size=0.2),
@@ -819,6 +820,12 @@ p.stats <- p.stats +
   ggtitle( paste( recent_season_str, "Rank among", n_comps, comp_position_fd, "with over", gm_requirement, "games played") ) +
   geom_text( data=top_labels, aes(x=num_stats+0.6, y=percentile, label=top_label), # labels
              hjust=-.15,size=2, color="slateblue")
+
+if( recent ){
+  p.stats <- p.stats + scale_fill_brewer( type="qual", palette=2 )
+} else {
+  p.stats <- p.stats + scale_fill_few( palette = "dark")
+}
 #   geom_text( aes( x=variable,y=team_lead_ptile, # team lead values
 #                   label= paste0( round(team_lead_value, digits=var_digits) ) ), 
 #              hjust=0.5, vjust=-1.3, size=2, parse=F, color="slateblue")
@@ -832,7 +839,7 @@ p.stats
 ```{r  main bar recent, fig.width=8, fig.height=2}
 this_season <- "20152016"
 # this_season <- "20142015"
-this_season_gm_min <- 20
+this_season_gm_min <- 30
 recent_season_categories <- c( "toi", "toi_pct", "zs" )
 toi_comparison_vars <- comparison_vars %>% filter( category %in% recent_season_categories )
 
@@ -942,7 +949,7 @@ this_player_linemates_by_game <- this_player_by_game_list$linemates_ev5on5
 p.linemates <- ggplot( this_player_linemates_by_game, aes(player_game_number, num_last_name_2_label))
 p.linemates <- p.linemates + 
   geom_tile( aes(fill=toi_pct),color="grey90", size=0.2 ) +
-  geom_text( data=game_dates, aes(label=date_opponent_win_loss, y=-1), color=few_darkblue, angle=90, size=1.3, hjust=0 ) +
+  # geom_text( data=game_dates, aes(label=date_opponent_win_loss, y=-1), color=few_darkblue, angle=90, size=1.3, hjust=0 ) +
   scale_fill_gradient2( low="white", high="navy", guide=FALSE, space="Lab" ) +
   geom_vline(xintercept=seq(10.5, max_games_floor_10+0.5, x_grid_interval), color=ten_game_separator_color, size=0.2 ) +
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) +
@@ -1025,8 +1032,10 @@ this_player_toi_by_game <- this_player_toi_by_game %>% left_join(
                                 toi_all %>% select( player_game_number, ma ), by="player_game_number"
 )
 
+date_opponent_y <- -10
 p.toi <- ggplot( this_player_toi_by_game, aes(x=player_game_number,y=toi) )
 p.toi <- p.toi + 
+  geom_text( data=game_dates, aes(label=date_opponent_win_loss, y=date_opponent_y), color=few_darkblue, angle=90, size=1.4, hjust=0 ) +
                     geom_bar(data = this_player_stats_by_game %>% 
                                       filter( filter_strength %in% c("pp", "ev5on5", "sh" ) | is.na(filter_strength) ),
                                       stat="identity", position="stack", aes(fill=filter_strength), na.rm=F ) +
@@ -1043,7 +1052,7 @@ p.toi <- p.toi +
   # team change line
   geom_vline(data=team_changes, aes(xintercept=player_game_number-0.5), color="orange" ) + 
   geom_vline(data=playoff_series, aes(xintercept=player_game_number-0.5), color=playoff_line_color, linetype=1 ) +
-  scale_y_continuous( "TOI",        minor_breaks=NULL,  breaks=seq(0,40,5),     limits=c(0,toi_max) ) +
+  scale_y_continuous( "TOI",        minor_breaks=NULL,  breaks=seq(0,40,5),     limits=c(date_opponent_y,toi_max) ) +
   scale_x_continuous("Game Number", minor_breaks =NULL, breaks=seq(-0.5,120,1),  limits=c(0.5, n_games+0.5), expand = c(0, 0)) +
   theme_chances + theme(
     legend.position = c(0.03,0.9), # top left. trial an error
@@ -1219,13 +1228,13 @@ p.points <- p.points +
 # plot.margin
 # top right bottom left
 
-theme_top    <- theme( plot.margin=unit(c( 0.5, 1, -0.1, 1), "cm"), # bottom previously 0.1
+theme_top    <- theme( plot.margin=unit(c( 0.5, 1, -0.2, 1), "cm"), # bottom previously 0.1
                       axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
 
-theme_middle <- theme( plot.margin=unit(c( -0.2, 1, -0.1, 1), "cm"), # bottom previously 0.1
+theme_middle <- theme( plot.margin=unit(c( -0.2, 1, -0.2, 1), "cm"), # bottom previously 0.1
   axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank() )
 
-theme_bottom <- theme( plot.margin=unit(c(-0.1,1,1,1), "cm"))
+theme_bottom <- theme( plot.margin=unit(c(-0.2,1,1,1), "cm"))
 
 p.toi_middle        <- p.toi + theme_middle
 p.toi_top           <- p.toi + theme_top
@@ -1250,12 +1259,12 @@ combined_charts <- rbind_plots( list( p.corsi_top,
                           p.points_middle, 
                           # p.score_middle,
                           p.toi_middle, p.linemates_bottom), 
-                         c(1.2, 
+                         c(1.1, 
                            1., 
                            1., 
                            # 0.5, 
-                           1.5, 
-                           4.8 ) )
+                           1.8, 
+                           4.7 ) )
 
 grid.newpage()
 grid.draw(combined_charts)
